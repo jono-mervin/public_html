@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "jsx": "preserve"
+  },
+  "exclude": ["node_modules"]
+}
+
+
