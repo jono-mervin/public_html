@@ -6,6 +6,42 @@
 // CALENDAR MODULE - ENHANCED VERSION
 // ==============================
 
+// Electoral term bounds: June 30, 2025 – June 30, 2028
+const CALENDAR_TERM_START = new Date(2025, 5, 30);
+const CALENDAR_TERM_END = new Date(2028, 5, 30);
+const CALENDAR_TERM_MIN_YEAR = 2025;
+const CALENDAR_TERM_MAX_YEAR = 2028;
+
+function clampCalendarToTerm(date) {
+    const d = date instanceof Date ? new Date(date) : new Date(date);
+    if (d < CALENDAR_TERM_START) return new Date(CALENDAR_TERM_START);
+    if (d > CALENDAR_TERM_END) return new Date(CALENDAR_TERM_END);
+    return d;
+}
+
+function applyCalendarTermClamp() {
+    if (!(calendarCurrentDate instanceof Date)) {
+        calendarCurrentDate = clampCalendarToTerm(new Date());
+    } else {
+        calendarCurrentDate = clampCalendarToTerm(calendarCurrentDate);
+    }
+    window.currentCalendarMonth = calendarCurrentDate.getMonth() + 1;
+    window.currentCalendarYear = calendarCurrentDate.getFullYear();
+}
+
+function wrapCalendarDateSetter(fnName) {
+    const original = window[fnName];
+    if (typeof original !== 'function') return;
+    window[fnName] = function (...args) {
+        original.apply(this, args);
+        const before = calendarCurrentDate instanceof Date ? calendarCurrentDate.getTime() : 0;
+        applyCalendarTermClamp();
+        if (calendarCurrentDate.getTime() !== before && typeof renderCalendar === 'function') {
+            renderCalendar();
+        }
+    };
+}
+
 // Calendar Helper Functions
 function getCurrentCalendarMeta() {
     const base = calendarCurrentDate instanceof Date ? calendarCurrentDate : new Date();
@@ -55,18 +91,11 @@ function getCurrentWeekBounds(calendarMeta) {
 // FIXED FUNCTIONAL CALENDAR WITH NOTES
 // ============================================
 
-// Initialize calendar state
+// Initialize calendar state within electoral term
+applyCalendarTermClamp();
 if (!window.currentCalendarMonth) {
-    const today = new Date();
-    let initDate = today;
-    const termStart = new Date(2025, 5, 30); // June 30, 2025
-    const termEnd = new Date(2028, 5, 30);   // June 30, 2028
-    
-    if (initDate < termStart) initDate = termStart;
-    if (initDate > termEnd) initDate = termEnd;
-    
-    window.currentCalendarMonth = initDate.getMonth() + 1;
-    window.currentCalendarYear = initDate.getFullYear();
+    window.currentCalendarMonth = calendarCurrentDate.getMonth() + 1;
+    window.currentCalendarYear = calendarCurrentDate.getFullYear();
 }
 
 window.calendarSessions = [];
@@ -74,7 +103,48 @@ window.renderCalendar = () => window.renderCalendarEnhanced();
 window.renderAdminCalendar = () => window.renderCalendarEnhanced();
 window.renderStaffCalendar = () => window.renderCalendarEnhanced();
 
+window.navigateCalendar = function (direction) {
+    const base = calendarCurrentDate instanceof Date ? new Date(calendarCurrentDate) : new Date();
+    if (direction === 'prev') {
+        if (calendarView === 'week') {
+            base.setDate(base.getDate() - 7);
+        } else if (calendarView === 'day') {
+            base.setDate(base.getDate() - 1);
+        } else {
+            base.setMonth(base.getMonth() - 1);
+        }
+    } else if (direction === 'next') {
+        if (calendarView === 'week') {
+            base.setDate(base.getDate() + 7);
+        } else if (calendarView === 'day') {
+            base.setDate(base.getDate() + 1);
+        } else {
+            base.setMonth(base.getMonth() + 1);
+        }
+    } else if (direction === 'today') {
+        base.setTime(new Date().getTime());
+    }
+
+    calendarCurrentDate = clampCalendarToTerm(base);
+    window.currentCalendarMonth = calendarCurrentDate.getMonth() + 1;
+    window.currentCalendarYear = calendarCurrentDate.getFullYear();
+    renderCalendarEnhanced();
+};
+
+[
+    'calendarPrev',
+    'calendarNext',
+    'onCalendarJumpChange',
+    'selectMonthYear',
+    'selectYearFromInput',
+    'selectWeekFromDate',
+    'selectDayFromCalendar',
+    'selectDayYearFromInput',
+    'setCalendarView'
+].forEach(wrapCalendarDateSetter);
+
 window.renderCalendarEnhanced = async function () {
+    applyCalendarTermClamp();
     // Guard: Only render if calendar is the active section
     if (window.activeSection && window.activeSection !== 'calendar') {
         console.log('Skipping calendar render: active section is ' + window.activeSection);
@@ -195,7 +265,7 @@ window.renderCalendarEnhanced = async function () {
                                    <div class="mt-4 flex items-center justify-between">
                                         <input type="number" id="pickerYearInput" value="${calendarMeta.year}" 
                                                class="w-24 px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border text-gray-800 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                                               min="1900" max="2100"
+                                               min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
                                                onchange="selectYearFromInput(this.value)">
                                         <button onclick="closeMonthYearPicker()" class="px-4 py-1.5 bg-gray-100 dark:bg-dark-bg text-gray-700 dark:text-white rounded-md text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
                                             Close
@@ -212,6 +282,7 @@ window.renderCalendarEnhanced = async function () {
                                    <div>
                                         <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Select a date to jump to that week</label>
                                         <input type="date" id="weekDateInput" value="${weekStartDate}" 
+                                               min="2025-06-30" max="2028-06-30"
                                                class="w-full px-3 py-2 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border text-gray-800 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                                                onchange="selectWeekFromDate(this.value)">
                                     </div>
@@ -260,7 +331,7 @@ window.renderCalendarEnhanced = async function () {
                                             </div>
                                             <input type="number" id="dayPickerYearInputQuick" value="${calendarMeta.year}" 
                                                    class="w-full px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500 text-center text-gray-800 dark:text-white"
-                                                   min="1900" max="2100"
+                                                   min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
                                                    onchange="selectDayPickerYear(parseInt(this.value)); event.stopPropagation();"
                                                    onclick="event.stopPropagation();"
                                                    placeholder="Enter year">
@@ -272,7 +343,7 @@ window.renderCalendarEnhanced = async function () {
                                <div class="mt-4 flex items-center justify-between">
                                     <input type="number" id="dayPickerYearInput" value="${calendarMeta.year}" 
                                            class="w-24 px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border text-gray-800 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                                           min="1900" max="2100"
+                                           min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
                                            onchange="selectDayYearFromInput(this.value)">
                                     <button onclick="navigateCalendar('today'); closeDayPicker();" ${isCurrentlyOnToday() ? 'disabled' : ''} class="px-4 py-1.5 ${isCurrentlyOnToday() ? 'bg-gray-100 dark:bg-dark-bg text-gray-400 dark:text-dark-muted cursor-not-allowed' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'} rounded-md text-sm transition font-medium">
                                         Today

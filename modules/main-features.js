@@ -17800,13 +17800,13 @@ window.navigateCalendar = function (direction) {
         base.setTime(new Date().getTime());
     }
 
-    // Constraint: Limit to February (1) and March (2) of current year
-    if (base.getMonth() < 1) {
-        base.setMonth(1);
-        base.setDate(1);
-    } else if (base.getMonth() > 2) {
-        base.setMonth(2);
-        base.setDate(31);
+    // Constraint: Limit to Electoral Term (June 30, 2025 to June 30, 2028)
+    const termStart = new Date(2025, 5, 30);
+    const termEnd = new Date(2028, 5, 30);
+    if (base < termStart) {
+        base.setTime(termStart.getTime());
+    } else if (base > termEnd) {
+        base.setTime(termEnd.getTime());
     }
 
     calendarCurrentDate = base;
