@@ -11,6 +11,192 @@ const CALENDAR_TERM_START = new Date(2025, 5, 30);
 const CALENDAR_TERM_END = new Date(2028, 5, 30);
 const CALENDAR_TERM_MIN_YEAR = 2025;
 const CALENDAR_TERM_MAX_YEAR = 2028;
+const CALENDAR_TERM_MIN_MONTH = 5; // June
+const CALENDAR_TERM_MAX_MONTH = 5; // June
+
+function clampCalendarYear(year) {
+    return Math.min(CALENDAR_TERM_MAX_YEAR, Math.max(CALENDAR_TERM_MIN_YEAR, year));
+}
+
+function isMonthYearInTerm(year, monthIndex) {
+    if (year < CALENDAR_TERM_MIN_YEAR || year > CALENDAR_TERM_MAX_YEAR) return false;
+    if (year === CALENDAR_TERM_MIN_YEAR && monthIndex < CALENDAR_TERM_MIN_MONTH) return false;
+    if (year === CALENDAR_TERM_MAX_YEAR && monthIndex > CALENDAR_TERM_MAX_MONTH) return false;
+    return true;
+}
+
+function getSimulatedNavDate(direction) {
+    const base = calendarCurrentDate instanceof Date ? new Date(calendarCurrentDate) : new Date();
+    if (direction === 'prev') {
+        if (calendarView === 'week') {
+            base.setDate(base.getDate() - 7);
+        } else if (calendarView === 'day') {
+            base.setDate(base.getDate() - 1);
+        } else {
+            base.setMonth(base.getMonth() - 1);
+        }
+    } else if (direction === 'next') {
+        if (calendarView === 'week') {
+            base.setDate(base.getDate() + 7);
+        } else if (calendarView === 'day') {
+            base.setDate(base.getDate() + 1);
+        } else {
+            base.setMonth(base.getMonth() + 1);
+        }
+    }
+    return base;
+}
+
+function canNavigateCalendar(direction) {
+    if (direction !== 'prev' && direction !== 'next') return true;
+    const target = getSimulatedNavDate(direction);
+    if (calendarView === 'month') {
+        return isMonthYearInTerm(target.getFullYear(), target.getMonth());
+    }
+    if (direction === 'prev') return target >= CALENDAR_TERM_START;
+    return target <= CALENDAR_TERM_END;
+}
+
+function calendarNavButtonClass(direction) {
+    return canNavigateCalendar(direction)
+        ? 'p-2 hover:bg-gray-100 dark:hover:bg-dark-bg rounded-lg transition'
+        : 'p-2 bg-gray-100 dark:bg-dark-bg text-gray-400 dark:text-dark-muted cursor-not-allowed rounded-lg';
+}
+
+function calendarPickerNavButtonClass(canChange) {
+    return canChange
+        ? 'p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition'
+        : 'p-1 text-gray-400 dark:text-dark-muted cursor-not-allowed rounded transition opacity-40';
+}
+
+function getMonthYearPickerYear() {
+    const yearInput = document.getElementById('pickerYearInput');
+    const parsed = yearInput ? parseInt(yearInput.value, 10) : NaN;
+    if (!isNaN(parsed)) return clampCalendarYear(parsed);
+    const yearLabel = document.getElementById('pickerYear');
+    const fromLabel = yearLabel ? parseInt(yearLabel.textContent, 10) : NaN;
+    if (!isNaN(fromLabel)) return clampCalendarYear(fromLabel);
+    return calendarCurrentDate instanceof Date ? calendarCurrentDate.getFullYear() : CALENDAR_TERM_MIN_YEAR;
+}
+
+function refreshMonthYearPickerControls() {
+    const year = getMonthYearPickerYear();
+    const prevBtn = document.getElementById('pickerYearPrev');
+    const nextBtn = document.getElementById('pickerYearNext');
+    if (prevBtn) {
+        const canPrev = year > CALENDAR_TERM_MIN_YEAR;
+        prevBtn.disabled = !canPrev;
+        prevBtn.className = calendarPickerNavButtonClass(canPrev);
+    }
+    if (nextBtn) {
+        const canNext = year < CALENDAR_TERM_MAX_YEAR;
+        nextBtn.disabled = !canNext;
+        nextBtn.className = calendarPickerNavButtonClass(canNext);
+    }
+    document.querySelectorAll('#monthYearPicker .month-picker-btn').forEach((btn) => {
+        const monthIdx = parseInt(btn.dataset.monthIdx, 10);
+        if (isNaN(monthIdx)) return;
+        const allowed = isMonthYearInTerm(year, monthIdx);
+        const isSelected = calendarCurrentDate instanceof Date
+            && calendarCurrentDate.getMonth() === monthIdx
+            && calendarCurrentDate.getFullYear() === year;
+        btn.disabled = !allowed;
+        if (!allowed) {
+            btn.className = 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition opacity-40 cursor-not-allowed text-gray-400 dark:text-dark-muted';
+        } else if (isSelected) {
+            btn.className = 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition bg-red-600 text-white';
+        } else {
+            btn.className = 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-bg';
+        }
+    });
+}
+
+window.clampYearInput = function (el) {
+    if (!el) return;
+    const raw = String(el.value || '').replace(/\D/g, '').slice(0, 4);
+    el.value = raw;
+    if (raw.length === 4) {
+        el.value = String(clampCalendarYear(parseInt(raw, 10)));
+    }
+};
+
+function getDayPickerDisplayMonthYear() {
+    const baseYear = calendarCurrentDate instanceof Date ? calendarCurrentDate.getFullYear() : new Date().getFullYear();
+    const baseMonth = calendarCurrentDate instanceof Date ? calendarCurrentDate.getMonth() : new Date().getMonth();
+    let displayYear = baseYear + (window.dayPickerYearOffset || 0);
+    let displayMonth = baseMonth + (window.dayPickerMonthOffset || 0);
+    while (displayMonth < 0) {
+        displayMonth += 12;
+        displayYear--;
+    }
+    while (displayMonth > 11) {
+        displayMonth -= 12;
+        displayYear++;
+    }
+    return { displayYear, displayMonth };
+}
+
+function canChangeDayPickerMonth(delta) {
+    const { displayYear, displayMonth } = getDayPickerDisplayMonthYear();
+    let newMonth = displayMonth + delta;
+    let newYear = displayYear;
+    while (newMonth < 0) {
+        newMonth += 12;
+        newYear--;
+    }
+    while (newMonth > 11) {
+        newMonth -= 12;
+        newYear++;
+    }
+    return isMonthYearInTerm(newYear, newMonth);
+}
+
+function canChangeDayPickerYear(delta) {
+    const { displayYear, displayMonth } = getDayPickerDisplayMonthYear();
+    return isMonthYearInTerm(displayYear + delta, displayMonth);
+}
+
+function refreshDayPickerNavControls() {
+    const { displayYear, displayMonth } = getDayPickerDisplayMonthYear();
+    const monthPrev = document.getElementById('dayPickerMonthPrev');
+    const monthNext = document.getElementById('dayPickerMonthNext');
+    const yearPrev = document.getElementById('dayPickerYearPrev');
+    const yearNext = document.getElementById('dayPickerYearNext');
+    const canMonthPrev = canChangeDayPickerMonth(-1);
+    const canMonthNext = canChangeDayPickerMonth(1);
+    const canYearPrev = canChangeDayPickerYear(-1);
+    const canYearNext = canChangeDayPickerYear(1);
+
+    if (monthPrev) {
+        monthPrev.disabled = !canMonthPrev;
+        monthPrev.className = `${calendarPickerNavButtonClass(canMonthPrev)} z-10`;
+    }
+    if (monthNext) {
+        monthNext.disabled = !canMonthNext;
+        monthNext.className = `${calendarPickerNavButtonClass(canMonthNext)} z-10`;
+    }
+    if (yearPrev) {
+        yearPrev.disabled = !canYearPrev;
+        yearPrev.className = calendarPickerNavButtonClass(canYearPrev);
+    }
+    if (yearNext) {
+        yearNext.disabled = !canYearNext;
+        yearNext.className = calendarPickerNavButtonClass(canYearNext);
+    }
+
+    const monthSelector = document.getElementById('dayPickerMonthSelector');
+    if (monthSelector) {
+        monthSelector.querySelectorAll('.day-picker-month-btn').forEach((btn) => {
+            const monthIdx = parseInt(btn.dataset.monthIdx, 10);
+            if (isNaN(monthIdx)) return;
+            const allowed = isMonthYearInTerm(displayYear, monthIdx);
+            btn.disabled = !allowed;
+            if (!allowed) {
+                btn.className = 'day-picker-month-btn px-3 py-2 text-xs font-medium rounded-md transition opacity-40 cursor-not-allowed text-gray-400 dark:text-dark-muted';
+            }
+        });
+    }
+}
 
 function clampCalendarToTerm(date) {
     const d = date instanceof Date ? new Date(date) : new Date(date);
@@ -104,6 +290,9 @@ window.renderAdminCalendar = () => window.renderCalendarEnhanced();
 window.renderStaffCalendar = () => window.renderCalendarEnhanced();
 
 window.navigateCalendar = function (direction) {
+    if ((direction === 'prev' || direction === 'next') && !canNavigateCalendar(direction)) {
+        return;
+    }
     const base = calendarCurrentDate instanceof Date ? new Date(calendarCurrentDate) : new Date();
     if (direction === 'prev') {
         if (calendarView === 'week') {
@@ -196,6 +385,14 @@ window.renderCalendarEnhanced = async function () {
     const calendarMeta = getCurrentCalendarMeta();
     window.currentCalendarMonth = calendarMeta.monthIndex + 1;
     window.currentCalendarYear = calendarMeta.year;
+    const canNavPrev = canNavigateCalendar('prev');
+    const canNavNext = canNavigateCalendar('next');
+    const pickerYearCanPrev = calendarMeta.year > CALENDAR_TERM_MIN_YEAR;
+    const pickerYearCanNext = calendarMeta.year < CALENDAR_TERM_MAX_YEAR;
+    const dayPickerCanMonthPrev = canChangeDayPickerMonth(-1);
+    const dayPickerCanMonthNext = canChangeDayPickerMonth(1);
+    const dayPickerCanYearPrev = canChangeDayPickerYear(-1);
+    const dayPickerCanYearNext = canChangeDayPickerYear(1);
 
     // Determine header range label based on view
     const monthNamesTitle = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -220,8 +417,8 @@ window.renderCalendarEnhanced = async function () {
            <div class="relative z-10">
                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                    <div class="text-white">
-                        <h1 class="text-3xl font-bold mb-2">Calendar (Versions)</h1>
-                        <p class="text-red-100 text-sm">View Versions / Sessions and manage your notes</p>
+                        <h1 class="text-3xl font-bold mb-2">Calendar </h1>
+                        <p class="text-red-100 text-sm">View Sessions and manage your notes</p>
                     </div>
                 </div>
             </div>
@@ -234,8 +431,8 @@ window.renderCalendarEnhanced = async function () {
                <div class="flex flex-col gap-3">
                    <div class="flex items-center justify-between">
                        <div class="flex items-center gap-3">
-                            <button onclick="navigateCalendar('prev')" class="p-2 hover:bg-gray-100 dark:hover:bg-dark-bg rounded-lg transition">
-                                <i class="bi bi-chevron-left text-gray-600 dark:text-dark-muted"></i>
+                            <button onclick="navigateCalendar('prev')" ${canNavPrev ? '' : 'disabled'} class="${calendarNavButtonClass('prev')}">
+                                <i class="bi bi-chevron-left ${canNavPrev ? 'text-gray-600 dark:text-dark-muted' : ''}"></i>
                             </button>
                            <div class="relative">
                                 <button onclick="${calendarView === 'month' ? 'toggleMonthYearPicker()' : calendarView === 'week' ? 'toggleWeekPicker()' : calendarView === 'day' ? 'toggleDayPicker()' : 'void(0)'}" class="text-xl font-bold text-gray-900 dark:text-white min-w-[200px] text-center px-4 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-bg border border-transparent hover:border-gray-200 dark:hover:border-dark-border transition flex items-center justify-center gap-2 ${calendarView === 'month' || calendarView === 'week' || calendarView === 'day' ? 'cursor-pointer' : 'cursor-default'}">
@@ -246,26 +443,36 @@ window.renderCalendarEnhanced = async function () {
                                <div id="monthYearPickerBackdrop" onclick="closeMonthYearPicker()" class="fixed inset-0 bg-transparent z-40 hidden"></div>
                                <div id="monthYearPicker" onclick="event.stopPropagation()" class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white dark:bg-dark-card rounded-lg shadow-xl border border-gray-200 dark:border-dark-border p-4 z-50 hidden" style="min-width: 280px;">
                                    <div class="flex items-center justify-between mb-4">
-                                        <button onclick="changeYearInPicker(-1)" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition">
+                                        <button id="pickerYearPrev" onclick="changeYearInPicker(-1)" ${pickerYearCanPrev ? '' : 'disabled'} class="${calendarPickerNavButtonClass(pickerYearCanPrev)}">
                                             <i class="bi bi-chevron-left"></i>
                                         </button>
                                         <span class="text-lg font-semibold text-gray-800 dark:text-white" id="pickerYear">${calendarMeta.year}</span>
-                                        <button onclick="changeYearInPicker(1)" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition">
+                                        <button id="pickerYearNext" onclick="changeYearInPicker(1)" ${pickerYearCanNext ? '' : 'disabled'} class="${calendarPickerNavButtonClass(pickerYearCanNext)}">
                                             <i class="bi bi-chevron-right"></i>
                                         </button>
                                     </div>
                                    <div class="grid grid-cols-3 gap-2">
-                                        ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((month, idx) => `
-                                            <button onclick="selectMonthYear(${idx}, ${calendarMeta.year})" 
-                                                    class="px-3 py-2 text-sm font-medium rounded-md transition ${idx === calendarMeta.monthIndex ? 'bg-red-600 text-white' : 'text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-bg'}">
+                                        ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((month, idx) => {
+                                            const monthAllowed = isMonthYearInTerm(calendarMeta.year, idx);
+                                            const monthSelected = idx === calendarMeta.monthIndex;
+                                            const monthClass = !monthAllowed
+                                                ? 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition opacity-40 cursor-not-allowed text-gray-400 dark:text-dark-muted'
+                                                : monthSelected
+                                                    ? 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition bg-red-600 text-white'
+                                                    : 'month-picker-btn px-3 py-2 text-sm font-medium rounded-md transition text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-bg';
+                                            return `
+                                            <button data-month-idx="${idx}" onclick="selectMonthYear(${idx}, ${calendarMeta.year})" ${monthAllowed ? '' : 'disabled'}
+                                                    class="${monthClass}">
                                                 ${month.substring(0, 3)}
                                             </button>
-                                        `).join('')}
+                                        `;
+                                        }).join('')}
                                     </div>
                                    <div class="mt-4 flex items-center justify-between">
                                         <input type="number" id="pickerYearInput" value="${calendarMeta.year}" 
                                                class="w-24 px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border text-gray-800 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                                                min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
+                                               oninput="clampYearInput(this)"
                                                onchange="selectYearFromInput(this.value)">
                                         <button onclick="closeMonthYearPicker()" class="px-4 py-1.5 bg-gray-100 dark:bg-dark-bg text-gray-700 dark:text-white rounded-md text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
                                             Close
@@ -295,43 +502,53 @@ window.renderCalendarEnhanced = async function () {
                                <div id="dayPickerBackdrop" onclick="closeDayPicker()" class="fixed inset-0 bg-transparent z-40 hidden"></div>
                                <div id="dayPicker" class="fixed bg-white dark:bg-dark-card rounded-lg shadow-xl border border-gray-200 dark:border-dark-border p-4 z-50 hidden" style="min-width: 300px; max-height: 600px; overflow-y: auto;" onclick="event.stopPropagation();">
                                    <div class="flex items-center justify-between mb-4 relative">
-                                        <button onclick="changeDayPickerMonth(-1); event.stopPropagation();" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition z-10">
+                                        <button id="dayPickerMonthPrev" onclick="changeDayPickerMonth(-1); event.stopPropagation();" ${dayPickerCanMonthPrev ? '' : 'disabled'} class="${calendarPickerNavButtonClass(dayPickerCanMonthPrev)} z-10">
                                             <i class="bi bi-chevron-left"></i>
                                         </button>
                                        <div class="text-center relative z-10">
                                             <button onclick="toggleDayPickerMonthSelector(); event.stopPropagation();" class="text-lg font-semibold text-gray-800 dark:text-white hover:text-red-600 transition cursor-pointer" id="dayPickerMonth">${monthNames[calendarMeta.monthIndex]}</button>
                                             <button onclick="toggleDayPickerYearSelector(); event.stopPropagation();" class="text-sm font-semibold text-gray-600 dark:text-dark-muted hover:text-red-600 transition cursor-pointer block mx-auto mt-1" id="dayPickerYear">${calendarMeta.year}</button>
                                         </div>
-                                        <button onclick="changeDayPickerMonth(1); event.stopPropagation();" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition z-10">
+                                        <button id="dayPickerMonthNext" onclick="changeDayPickerMonth(1); event.stopPropagation();" ${dayPickerCanMonthNext ? '' : 'disabled'} class="${calendarPickerNavButtonClass(dayPickerCanMonthNext)} z-10">
                                             <i class="bi bi-chevron-right"></i>
                                         </button>
                                         
                                         <!-- Month Selector Dropdown -->
                                        <div id="dayPickerMonthSelector" onclick="event.stopPropagation()" class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white dark:bg-dark-card rounded-lg shadow-lg border border-gray-200 dark:border-dark-border p-3 z-[100] hidden" style="min-width: 200px;">
                                            <div class="grid grid-cols-3 gap-2">
-                                                ${monthNames.map((month, idx) => `
-                                                    <button onclick="selectDayPickerMonth(${idx}); event.stopPropagation();" 
-                                                            class="px-3 py-2 text-xs font-medium rounded-md transition ${idx === calendarMeta.monthIndex ? 'bg-red-600 text-white' : 'text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-bg'}">
+                                                ${monthNames.map((month, idx) => {
+                                                    const monthAllowed = isMonthYearInTerm(calendarMeta.year, idx);
+                                                    const monthSelected = idx === calendarMeta.monthIndex;
+                                                    const monthClass = !monthAllowed
+                                                        ? 'day-picker-month-btn px-3 py-2 text-xs font-medium rounded-md transition opacity-40 cursor-not-allowed text-gray-400 dark:text-dark-muted'
+                                                        : monthSelected
+                                                            ? 'day-picker-month-btn px-3 py-2 text-xs font-medium rounded-md transition bg-red-600 text-white'
+                                                            : 'day-picker-month-btn px-3 py-2 text-xs font-medium rounded-md transition text-gray-700 dark:text-dark-text hover:bg-gray-100 dark:hover:bg-dark-bg';
+                                                    return `
+                                                    <button data-month-idx="${idx}" onclick="selectDayPickerMonth(${idx}); event.stopPropagation();" ${monthAllowed ? '' : 'disabled'}
+                                                            class="${monthClass}">
                                                         ${month.substring(0, 3)}
                                                     </button>
-                                                `).join('')}
+                                                `;
+                                                }).join('')}
                                             </div>
                                         </div>
                                         
                                         <!-- Year Selector Dropdown -->
                                        <div id="dayPickerYearSelector" onclick="event.stopPropagation()" class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white dark:bg-dark-card rounded-lg shadow-lg border border-gray-200 dark:border-dark-border p-3 z-[100] hidden" style="min-width: 150px;">
                                            <div class="flex items-center justify-between mb-2">
-                                                <button onclick="changeDayPickerYear(-1); event.stopPropagation();" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition">
+                                                <button id="dayPickerYearPrev" onclick="changeDayPickerYear(-1); event.stopPropagation();" ${dayPickerCanYearPrev ? '' : 'disabled'} class="${calendarPickerNavButtonClass(dayPickerCanYearPrev)}">
                                                     <i class="bi bi-chevron-left text-xs"></i>
                                                 </button>
                                                 <span class="text-sm font-semibold text-gray-800 dark:text-white" id="dayPickerYearDisplay">${calendarMeta.year}</span>
-                                                <button onclick="changeDayPickerYear(1); event.stopPropagation();" class="p-1 text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-bg rounded transition">
+                                                <button id="dayPickerYearNext" onclick="changeDayPickerYear(1); event.stopPropagation();" ${dayPickerCanYearNext ? '' : 'disabled'} class="${calendarPickerNavButtonClass(dayPickerCanYearNext)}">
                                                     <i class="bi bi-chevron-right text-xs"></i>
                                                 </button>
                                             </div>
                                             <input type="number" id="dayPickerYearInputQuick" value="${calendarMeta.year}" 
                                                    class="w-full px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500 text-center text-gray-800 dark:text-white"
                                                    min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
+                                                   oninput="clampYearInput(this)"
                                                    onchange="selectDayPickerYear(parseInt(this.value)); event.stopPropagation();"
                                                    onclick="event.stopPropagation();"
                                                    placeholder="Enter year">
@@ -344,6 +561,7 @@ window.renderCalendarEnhanced = async function () {
                                     <input type="number" id="dayPickerYearInput" value="${calendarMeta.year}" 
                                            class="w-24 px-3 py-1.5 bg-white dark:bg-dark-bg border border-gray-300 dark:border-dark-border text-gray-800 dark:text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                                            min="${CALENDAR_TERM_MIN_YEAR}" max="${CALENDAR_TERM_MAX_YEAR}"
+                                           oninput="clampYearInput(this)"
                                            onchange="selectDayYearFromInput(this.value)">
                                     <button onclick="navigateCalendar('today'); closeDayPicker();" ${isCurrentlyOnToday() ? 'disabled' : ''} class="px-4 py-1.5 ${isCurrentlyOnToday() ? 'bg-gray-100 dark:bg-dark-bg text-gray-400 dark:text-dark-muted cursor-not-allowed' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'} rounded-md text-sm transition font-medium">
                                         Today
@@ -356,8 +574,8 @@ window.renderCalendarEnhanced = async function () {
                                 `;
         })() : ''}
                             </div>
-                            <button onclick="navigateCalendar('next')" class="p-2 hover:bg-gray-100 dark:hover:bg-dark-bg rounded-lg transition">
-                                <i class="bi bi-chevron-right text-gray-600 dark:text-dark-muted"></i>
+                            <button onclick="navigateCalendar('next')" ${canNavNext ? '' : 'disabled'} class="${calendarNavButtonClass('next')}">
+                                <i class="bi bi-chevron-right ${canNavNext ? 'text-gray-600 dark:text-dark-muted' : ''}"></i>
                             </button>
                             <button onclick="navigateCalendar('today')" ${calendarView === 'week' ? (isCurrentlyOnCurrentWeek() ? 'disabled' : '') : (isCurrentlyOnToday() ? 'disabled' : '')} class="px-3 py-2 text-sm ${calendarView === 'week' ? (isCurrentlyOnCurrentWeek() ? 'bg-gray-100 dark:bg-dark-bg text-gray-400 dark:text-dark-muted cursor-not-allowed' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30') : (isCurrentlyOnToday() ? 'bg-gray-100 dark:bg-dark-bg text-gray-400 dark:text-dark-muted cursor-not-allowed' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30')} rounded-lg transition font-medium">
                                 ${calendarView === 'week' ? 'This Week' : 'Today'}
@@ -899,6 +1117,179 @@ window.saveEditNote = async function (dateKey, noteId = null, action = 'save') {
 
 window.saveDateNote = function (dateKey) {
     saveEditNote(dateKey);
+};
+
+window.toggleMonthYearPicker = function () {
+    const picker = document.getElementById('monthYearPicker');
+    const backdrop = document.getElementById('monthYearPickerBackdrop');
+    if (!picker) return;
+    const isHidden = picker.classList.contains('hidden');
+    picker.classList.toggle('hidden');
+    if (backdrop) backdrop.classList.toggle('hidden');
+    if (isHidden) {
+        const year = calendarCurrentDate instanceof Date ? calendarCurrentDate.getFullYear() : CALENDAR_TERM_MIN_YEAR;
+        const yearLabel = document.getElementById('pickerYear');
+        const yearInput = document.getElementById('pickerYearInput');
+        if (yearLabel) yearLabel.textContent = year;
+        if (yearInput) yearInput.value = year;
+        refreshMonthYearPickerControls();
+    }
+};
+
+window.changeYearInPicker = function (delta) {
+    const year = getMonthYearPickerYear();
+    const newYear = clampCalendarYear(year + delta);
+    if (newYear === year) return;
+    const yearLabel = document.getElementById('pickerYear');
+    const yearInput = document.getElementById('pickerYearInput');
+    if (yearLabel) yearLabel.textContent = newYear;
+    if (yearInput) yearInput.value = newYear;
+    refreshMonthYearPickerControls();
+};
+
+window.selectMonthYear = function (monthIdx, year) {
+    const targetYear = getMonthYearPickerYear();
+    if (!isMonthYearInTerm(targetYear, monthIdx)) return;
+    const currentDay = calendarCurrentDate ? calendarCurrentDate.getDate() : new Date().getDate();
+    calendarCurrentDate = clampCalendarToTerm(new Date(targetYear, monthIdx, currentDay));
+    if (typeof closeMonthYearPicker === 'function') closeMonthYearPicker();
+    renderCalendarEnhanced();
+};
+
+window.selectYearFromInput = function (val) {
+    const year = clampCalendarYear(parseInt(val, 10));
+    if (isNaN(year)) return;
+    const yearInput = document.getElementById('pickerYearInput');
+    const yearLabel = document.getElementById('pickerYear');
+    if (yearInput) yearInput.value = year;
+    if (yearLabel) yearLabel.textContent = year;
+    refreshMonthYearPickerControls();
+    const currentMonth = calendarCurrentDate ? calendarCurrentDate.getMonth() : CALENDAR_TERM_MIN_MONTH;
+    const safeMonth = isMonthYearInTerm(year, currentMonth) ? currentMonth : CALENDAR_TERM_MIN_MONTH;
+    const currentDay = calendarCurrentDate ? calendarCurrentDate.getDate() : 1;
+    calendarCurrentDate = clampCalendarToTerm(new Date(year, safeMonth, currentDay));
+    renderCalendarEnhanced();
+};
+
+window.changeDayPickerMonth = function (delta) {
+    if (!canChangeDayPickerMonth(delta)) return;
+    window.dayPickerMonthOffset = (window.dayPickerMonthOffset || 0) + delta;
+    if (window.dayPickerMonthOffset > 11) {
+        window.dayPickerMonthOffset = 0;
+        window.dayPickerYearOffset = (window.dayPickerYearOffset || 0) + 1;
+    } else if (window.dayPickerMonthOffset < 0) {
+        window.dayPickerMonthOffset = 11;
+        window.dayPickerYearOffset = (window.dayPickerYearOffset || 0) - 1;
+    }
+    if (typeof updateDayPickerDisplay === 'function') updateDayPickerDisplay();
+};
+
+window.changeDayPickerYear = function (delta) {
+    if (!canChangeDayPickerYear(delta)) return;
+    window.dayPickerYearOffset = (window.dayPickerYearOffset || 0) + delta;
+    if (typeof updateDayPickerDisplay === 'function') updateDayPickerDisplay();
+};
+
+window.updateDayPickerDisplay = function () {
+    const { displayYear, displayMonth } = getDayPickerDisplayMonthYear();
+    const yearLabel = document.getElementById('dayPickerYear');
+    const monthLabel = document.getElementById('dayPickerMonth');
+    const yearDisplay = document.getElementById('dayPickerYearDisplay');
+    const yearInputQuick = document.getElementById('dayPickerYearInputQuick');
+    const yearInput = document.getElementById('dayPickerYearInput');
+    const calendarGrid = document.getElementById('dayPickerCalendar');
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    if (yearLabel) yearLabel.textContent = displayYear;
+    if (yearDisplay) yearDisplay.textContent = displayYear;
+    if (yearInputQuick) yearInputQuick.value = displayYear;
+    if (yearInput) yearInput.value = displayYear;
+    if (monthLabel) monthLabel.textContent = monthNames[displayMonth];
+    if (calendarGrid && typeof generateDayPickerCalendar === 'function') {
+        calendarGrid.innerHTML = generateDayPickerCalendar(displayYear, displayMonth);
+    }
+    refreshDayPickerNavControls();
+};
+
+window.selectDayPickerMonth = function (monthIdx) {
+    const { displayYear } = getDayPickerDisplayMonthYear();
+    if (!isMonthYearInTerm(displayYear, monthIdx)) return;
+    const baseYear = calendarCurrentDate.getFullYear();
+    const baseMonth = calendarCurrentDate.getMonth();
+    const totalMonthsDiff = (displayYear - baseYear) * 12 + (monthIdx - baseMonth);
+    window.dayPickerYearOffset = Math.floor(totalMonthsDiff / 12);
+    window.dayPickerMonthOffset = totalMonthsDiff % 12;
+    updateDayPickerDisplay();
+    if (typeof window.toggleDayPickerMonthSelector === 'function') {
+        window.toggleDayPickerMonthSelector();
+    }
+};
+
+window.selectDayPickerYear = function (year) {
+    const safeYear = clampCalendarYear(parseInt(year, 10));
+    if (isNaN(safeYear)) return;
+    const { displayMonth } = getDayPickerDisplayMonthYear();
+    if (!isMonthYearInTerm(safeYear, displayMonth)) return;
+    window.dayPickerYearOffset = safeYear - calendarCurrentDate.getFullYear();
+    updateDayPickerDisplay();
+    if (typeof window.toggleDayPickerYearSelector === 'function') {
+        window.toggleDayPickerYearSelector();
+    }
+};
+
+window.selectDayYearFromInput = function (val) {
+    const year = clampCalendarYear(parseInt(val, 10));
+    if (isNaN(year)) return;
+    const currentMonth = calendarCurrentDate ? calendarCurrentDate.getMonth() : CALENDAR_TERM_MIN_MONTH;
+    const safeMonth = isMonthYearInTerm(year, currentMonth) ? currentMonth : CALENDAR_TERM_MIN_MONTH;
+    const currentDay = calendarCurrentDate ? calendarCurrentDate.getDate() : 1;
+    calendarCurrentDate = clampCalendarToTerm(new Date(year, safeMonth, currentDay));
+    window.dayPickerYearOffset = 0;
+    window.dayPickerMonthOffset = 0;
+    updateDayPickerDisplay();
+    renderCalendarEnhanced();
+};
+
+window.toggleDayPicker = function () {
+    const picker = document.getElementById('dayPicker');
+    const backdrop = document.getElementById('dayPickerBackdrop');
+    if (!picker) return;
+    const isHidden = picker.classList.contains('hidden');
+    picker.classList.toggle('hidden');
+    if (backdrop) backdrop.classList.toggle('hidden');
+    if (isHidden) {
+        window.dayPickerYearOffset = 0;
+        window.dayPickerMonthOffset = 0;
+        updateDayPickerDisplay();
+        setTimeout(() => {
+            const button = document.querySelector('[onclick*="toggleDayPicker"]');
+            if (!button || !picker) return;
+            const buttonRect = button.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
+            const maxHeight = Math.min(600, viewportHeight - 100);
+            picker.style.maxHeight = `${maxHeight}px`;
+            picker.style.overflowY = 'auto';
+            picker.style.visibility = 'hidden';
+            picker.style.display = 'block';
+            const pickerRect = picker.getBoundingClientRect();
+            picker.style.visibility = '';
+            let top = buttonRect.bottom + 8;
+            let left = buttonRect.left + (buttonRect.width / 2) - (pickerRect.width / 2);
+            if (left < 8) left = 8;
+            else if (left + pickerRect.width > viewportWidth - 8) left = viewportWidth - pickerRect.width - 8;
+            if (top + pickerRect.height > viewportHeight - 8) {
+                const topAbove = buttonRect.top - pickerRect.height - 8;
+                top = topAbove >= 8 ? topAbove : viewportHeight - pickerRect.height - 8;
+            }
+            if (top < 8) top = 8;
+            picker.style.position = 'fixed';
+            picker.style.top = `${top}px`;
+            picker.style.left = `${left}px`;
+            picker.style.transform = 'none';
+            picker.style.zIndex = '9999';
+        }, 50);
+    }
 };
 
 // Final ensure global pointers are set

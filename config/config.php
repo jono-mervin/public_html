@@ -1,9 +1,9 @@
 <?php
 // Database configuration
 define('DB_HOST', 'localhost');
-define('DB_USER', 'lacs_root');
-define('DB_PASS', 'ju3!%GN65n3yK54+');
-define('DB_NAME', 'lacs_lacs');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'lacs');
 
 // Create database connection
 function getDBConnection()

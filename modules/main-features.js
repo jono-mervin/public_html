@@ -223,7 +223,7 @@ function renderSidebar() {
 
     let sidebarContent = '';
 
-    if (role === 'Super Admin' || role === 'Admin') {
+    if (role === 'Super Admin' || role === 'Admin' || role === 'Administrator') {
         sidebarContent = `
             <div class="px-4 space-y-1">
                 <!-- Dashboard -->
@@ -440,7 +440,7 @@ async function updateUserInfo() {
     // 1. Hide/Show Settings Link in Dropdown
     const settingsLink = document.getElementById('dropdown-settings');
     if (settingsLink) {
-        if (user.role === 'Super Admin' || user.role === 'Admin') {
+        if (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator') {
             settingsLink.style.display = 'block';
         } else {
             settingsLink.style.display = 'none';
@@ -915,7 +915,7 @@ async function showSection(sectionId) {
             breadcrumbCurrent.textContent = 'Settings';
             break;
         case 'public-portal':
-            if (getCurrentUser() && getCurrentUser().(role === 'Super Admin' || role === 'Admin')) {
+            if (getCurrentUser() && (getCurrentUser().role === 'Super Admin' || getCurrentUser().role === 'Admin' || getCurrentUser().role === 'Administrator')) {
                 renderPortalManagement();
                 pageTitle.textContent = 'Portal Management';
                 breadcrumbCurrent.textContent = 'Portal Management';
@@ -977,6 +977,7 @@ function checkAccess(sectionId) {
     const permissions = {
         'Super Admin': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'audit', 'settings', 'public-portal', 'profile'],
         'Admin': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'public-portal', 'profile'],
+        'Administrator': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'audit', 'settings', 'public-portal', 'profile'],
         'Staff': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'notifications', 'profile', 'analytics'],
         'User - Committee': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'notifications', 'profile', 'analytics']
     };
@@ -997,7 +998,7 @@ function renderDashboard() {
 
     const normalizedRole = role.toLowerCase();
 
-    if (normalizedRole === 'super admin') {
+    if (normalizedRole === 'super admin' || normalizedRole === 'admin' || normalizedRole === 'administrator') {
         renderAdminDashboard(user);
     } else if (normalizedRole === 'staff') {
         window.renderStaffDashboard(user);
@@ -1998,7 +1999,7 @@ function selectDayYearFromInput(val) {
 function renderCalendar() {
     const user = getCurrentUser();
     const role = user ? user.role : 'Super Admin';
-    const isAdmin = (role === 'Super Admin' || role === 'Admin');
+    const isAdmin = (role === 'Super Admin' || role === 'Admin' || role === 'Administrator');
 
     const calendarMeta = getCurrentCalendarMeta();
 
@@ -2615,7 +2616,7 @@ async function drop(ev, date) {
 
         // Re-render Calendar with current month metadata and current view
         const user = getCurrentUser();
-        const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+        const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
         const calendarMeta = getCurrentCalendarMeta();
         document.getElementById('calendarGrid').innerHTML = `
             <div class="min-h-[120px] p-2 border-b border-r border-gray-100 bg-gray-50/30">
@@ -3265,7 +3266,7 @@ function generateSessionCards(role) {
 
 // Open Session Details Modal
 async function openSessionDetails(id, role) {
-    const isAdmin = (role === 'Super Admin' || role === 'Admin');
+    const isAdmin = (role === 'Super Admin' || role === 'Admin' || role === 'Administrator');
     const isStaff = role === 'Staff';
     const isUser = role === 'User - Committee';
 
@@ -3667,7 +3668,7 @@ async function renderAgendas() {
         </div>
     `;
 
-    if ((role === 'Super Admin' || role === 'Admin')) {
+    if ((role === 'Super Admin' || role === 'Admin' || role === 'Administrator')) {
         await renderAdminAgendas();
     } else if (role === 'Staff') {
         await renderStaffAgendas();
@@ -3800,7 +3801,7 @@ async function viewSessionAgendas(sessionId) {
         const session = sessionData.session;
         const sessionAgendas = agendasData.success ? agendasData.agendas : [];
         const user = getCurrentUser();
-        const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+        const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
 
         const html = `
             <div class="space-y-6 animate-fade-in-up">
@@ -4013,7 +4014,7 @@ async function renderAgendaDetails(id) {
 
         const user = getCurrentUser();
         const role = user ? user.role : 'User';
-        const isAdmin = (role === 'Super Admin' || role === 'Admin');
+        const isAdmin = (role === 'Super Admin' || role === 'Admin' || role === 'Administrator');
 
         const html = `
             <div class="space-y-6 animate-fade-in-up">
@@ -5113,7 +5114,7 @@ function markAsRead(id) {
         showNotification('Marked as read', 'success');
         // Re-render current view (simplified)
         const user = getCurrentUser();
-        if (user.(role === 'Super Admin' || role === 'Admin')) {
+        if ((user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator')) {
             renderAdminReminders();
         } else {
             renderStaffReminders();
@@ -5243,7 +5244,7 @@ function renderUserManagement() {
                                 </div>
                             </td>
                             <td class="p-4">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.(role === 'Super Admin' || role === 'Admin') ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${(user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator') ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
                                     ${user.role}
                                 </span>
                             </td>
@@ -8272,7 +8273,7 @@ function renderReportsAnalytics() {
     const user = getCurrentUser();
     const role = user ? user.role : 'Super Admin';
 
-    if ((role === 'Super Admin' || role === 'Admin')) {
+    if ((role === 'Super Admin' || role === 'Admin' || role === 'Administrator')) {
         renderAdminAnalytics(user);
     } else if (role === 'Staff') {
         renderStaffAnalytics(user);
@@ -16245,7 +16246,7 @@ window.editSession = async function (sessionId) {
                     </div>
 
                     <div class="flex gap-3 pt-4 border-t border-gray-200">
-                        ${(getCurrentUser()?.(role === 'Super Admin' || role === 'Admin') || (String(getCurrentUser()?.role).toLowerCase() === 'staff' && session.created_by == getCurrentUser()?.id)) ? `
+                        ${((['Super Admin', 'Admin', 'Administrator'].includes(getCurrentUser()?.role)) || (String(getCurrentUser()?.role).toLowerCase() === 'staff' && session.created_by == getCurrentUser()?.id)) ? `
                         <button type="button" onclick="confirmDeleteSession(${sessionId})" class="px-4 py-3 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 font-medium transition flex items-center gap-2">
                             <i class="bi bi-trash"></i> Delete
                         </button>
@@ -16832,7 +16833,7 @@ console.log('Sessions module updated with delete button');
 window.renderCalendarEnhanced = function () {
     const user = getCurrentUser();
     const role = user ? user.role : 'Super Admin';
-    const isAdmin = (role === 'Super Admin' || role === 'Admin');
+    const isAdmin = (role === 'Super Admin' || role === 'Admin' || role === 'Administrator');
 
     const calendarMeta = getCurrentCalendarMeta();
 
@@ -17080,7 +17081,7 @@ window.calendarSessions = [];
 window.renderCalendarEnhanced = async function () {
     const user = getCurrentUser();
     const role = user ? user.role : 'Super Admin';
-    const isAdmin = (role === 'Super Admin' || role === 'Admin');
+    const isAdmin = (role === 'Super Admin' || role === 'Admin' || role === 'Administrator');
 
     // Fetch sessions for calendar
     try {
@@ -19396,7 +19397,7 @@ window.handleSearchResultClick = function (action, data) {
             }
             break;
         case 'deadline':
-            if (getCurrentUser().(role === 'Super Admin' || role === 'Admin')) {
+            if (getCurrentUser() && (getCurrentUser().role === 'Super Admin' || getCurrentUser().role === 'Admin' || getCurrentUser().role === 'Administrator')) {
                 showSection('deadlines');
             } else {
                 showSection('my-deadlines');

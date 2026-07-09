@@ -31,6 +31,7 @@ $password = $input['password'];
 $conn = getDBConnection();
 
 try {
+
     // Fetch security settings
     $maxAttempts = (int) getSystemSetting('max_login_attempts', 5);
     $lockoutMins = (int) getSystemSetting('lockout_duration', 15);
@@ -119,21 +120,47 @@ try {
                 }
             }
 
-            // Require OTP for all roles
-            $_SESSION['temp_user_id'] = $user['user_id'];
-            $_SESSION['is_logged_in'] = false; // Still false until OTP verified
+            // Admins skip OTP; all other roles require email verification
+            if ($isAdminRole) {
+                $_SESSION['user_id'] = $user['user_id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['user_name'] = $user['user_name'];
+                $_SESSION['user_role'] = $user['user_role'];
+                $_SESSION['email'] = $user['email'];
+                $_SESSION['last_login'] = $user['last_login'];
+                $_SESSION['is_logged_in'] = true;
 
-            // Return success with OTP flag
-            echo json_encode([
-                'success' => true,
-                'otp_required' => true,
-                'message' => 'Credentials verified. Verification code required.',
-                'user' => [
-                    'id' => $user['user_id'],
-                    'email' => $user['email'],
-                    'name' => $user['user_name']
-                ]
-            ]);
+                $updateStmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE user_id = ?");
+                $updateStmt->bind_param("i", $user['user_id']);
+                $updateStmt->execute();
+                $updateStmt->close();
+
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Login successful.',
+                    'user' => [
+                        'id' => $user['user_id'],
+                        'email' => $user['email'],
+                        'name' => $user['user_name'],
+                        'role' => $user['user_role'],
+                        'last_login' => $user['last_login']
+                    ]
+                ]);
+            } else {
+                $_SESSION['temp_user_id'] = $user['user_id'];
+                $_SESSION['is_logged_in'] = false; // Still false until OTP verified
+
+                echo json_encode([
+                    'success' => true,
+                    'otp_required' => true,
+                    'message' => 'Credentials verified. Verification code required.',
+                    'user' => [
+                        'id' => $user['user_id'],
+                        'email' => $user['email'],
+                        'name' => $user['user_name']
+                    ]
+                ]);
+            }
         } else {
             // INVALID PASSWORD: Track failure
             $newAttempts = (int) $user['failed_attempts'] + 1;
@@ -168,5 +195,6 @@ try {
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 
-$conn->close();
-?>
+if (isset($conn) && $conn instanceof mysqli) {
+    $conn->close();
+}

@@ -236,7 +236,7 @@ window.renderReminders = async function () {
 
         // Fetch upcoming sessions for monitoring (Admins and Staffs)
         const user = getCurrentUser();
-        const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+        const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
         const isStaff = user && user.role === 'Staff';
         const canMonitor = isAdmin || isStaff;
         let upcomingSessions = [];
@@ -407,8 +407,8 @@ function renderRemindersEmptyState() {
         <div class="space-y-6 animate-fade-in-up">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">${user && user.(role === 'Super Admin' || role === 'Admin') ? 'System Reminders & Notifications' : 'Notifications'}</h2>
-                    <p class="text-sm text-gray-500 dark:text-dark-muted">${user && user.(role === 'Super Admin' || role === 'Admin') ? 'Manage system-wide reminders and send notifications to authorized users' : 'Manage your personal notifications and alerts'}</p>
+                    <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">${user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator') ? 'System Reminders & Notifications' : 'Notifications'}</h2>
+                    <p class="text-sm text-gray-500 dark:text-dark-muted">${user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator') ? 'Manage system-wide reminders and send notifications to authorized users' : 'Manage your personal notifications and alerts'}</p>
                 </div>
                 <div class="flex gap-2">
                     ${user && user.role !== 'User - Committee' ? `
@@ -441,7 +441,7 @@ window.openCreateReminderModalFinal = function (initialData = {}) {
 
     const now = new Date();
     const user = getCurrentUser();
-    const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+    const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
     const isEdit = !!initialData.reminder_id;
 
     let initialDate = '';
@@ -1102,7 +1102,7 @@ window.filterSystemReminders = function (filterType) {
         `;
     } else {
         const user = getCurrentUser();
-        const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+        const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
         listContainer.innerHTML = filtered.map(r => getReminderItemHtml(r, isAdmin, user)).join('');
     }
 };
@@ -1135,7 +1135,7 @@ window.viewReminderDetails = async function (reminderId, forceModal = false) {
     if (!reminder) return;
 
     const user = getCurrentUser();
-    const isAdmin = user && user.(role === 'Super Admin' || role === 'Admin');
+    const isAdmin = user && (user.role === 'Super Admin' || user.role === 'Admin' || user.role === 'Administrator');
     const isStaff = user && user.role === 'Staff';
     const canMonitor = isAdmin || isStaff;
     const isUnread = !reminder.is_read || reminder.is_read === 0 || reminder.is_read === false;

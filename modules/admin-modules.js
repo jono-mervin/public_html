@@ -346,7 +346,7 @@ async function loadUsersDataEnhanced() {
                     </div>
                     <div class="bg-white dark:bg-dark-card p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-border">
                         <p class="text-sm text-gray-500 dark:text-dark-muted">Admins</p>
-                        <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">${users.filter(u => u.user_(role === 'Super Admin' || role === 'Admin')).length}</p>
+                        <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">${users.filter(u => u.user_role === 'Super Admin' || u.user_role === 'Admin' || u.user_role === 'Administrator').length}</p>
                     </div>
                 `;
             }
