@@ -5778,6 +5778,16 @@ async function renderSettingsFinalPremium() {
                         <i class="bi bi-chevron-right text-[10px] opacity-0 group-[.active]:opacity-100 transition-all"></i>
                     </button>
 
+                    <button onclick="switchSettingsTab('integration')" id="tab-integration" class="setting-tab-btn group w-full flex items-center justify-between px-5 py-4 rounded-2xl transition-all duration-300">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-white dark:bg-dark-card shadow-sm flex items-center justify-center text-gray-500 group-[.active]:text-red-600 transition-all">
+                                <i class="bi bi-plug text-lg"></i>
+                            </div>
+                            <span class="font-bold text-sm">Integration</span>
+                        </div>
+                        <i class="bi bi-chevron-right text-[10px] opacity-0 group-[.active]:opacity-100 transition-all"></i>
+                    </button>
+
                     <div class="mt-auto pt-10">
                         <div class="p-6 rounded-[24px] bg-gradient-to-br from-gray-50 to-white dark:from-dark-bg/40 dark:to-dark-card border border-gray-100 dark:border-dark-border">
                             <h4 class="text-xs font-bold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
@@ -6253,9 +6263,339 @@ function switchSettingsTab(tabId, skipSync = false) {
                 </div>
             </div>
         `;
+    } else if (tabId === 'integration') {
+        const saveBar = document.getElementById('settings-save-bar');
+        if (saveBar) {
+            saveBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+        }
+        content = `
+            <div id="integration-settings-root" class="animate-slide-in">
+                <div class="flex items-center justify-center py-20">
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="w-12 h-12 border-4 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
+                        <span class="text-sm font-bold text-gray-500 dark:text-dark-muted">Loading integration settings...</span>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     contentArea.innerHTML = content;
+
+    if (tabId === 'integration') {
+        loadIntegrationSettingsTab();
+    }
+}
+
+function escapeIntegrationHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+window.loadIntegrationSettingsTab = async function () {
+    const root = document.getElementById('integration-settings-root');
+    if (!root) return;
+
+    try {
+        const response = await fetch('../api/v1/clients.php?logs=1');
+        const result = await response.json();
+
+        if (!result.success) {
+            root.innerHTML = `
+                <div class="p-8 rounded-3xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
+                    <h3 class="font-black text-red-700 dark:text-red-400 mb-2">Unable to load integration settings</h3>
+                    <p class="text-sm text-red-600 dark:text-red-300">${escapeIntegrationHtml(result.message || 'Unknown error')}</p>
+                </div>
+            `;
+            return;
+        }
+
+        root.innerHTML = renderIntegrationSettingsContent(
+            result.data.clients || [],
+            result.data.available_scopes || [],
+            result.data.term || {},
+            result.data.recent_logs || []
+        );
+    } catch (error) {
+        console.error('Integration settings load failed:', error);
+        root.innerHTML = `
+            <div class="p-8 rounded-3xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
+                <h3 class="font-black text-red-700 dark:text-red-400 mb-2">Connection error</h3>
+                <p class="text-sm text-red-600 dark:text-red-300">Could not reach the integration API. The main system is unaffected.</p>
+            </div>
+        `;
+    }
+};
+
+function renderIntegrationSettingsContent(clients, availableScopes, term, recentLogs) {
+    const scopeOptions = availableScopes.map(scope => `
+        <label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border cursor-pointer hover:border-red-200 dark:hover:border-red-900/40 transition">
+            <input type="checkbox" name="integration_scope" value="${escapeIntegrationHtml(scope)}" class="rounded border-gray-300 text-red-600 focus:ring-red-500" ${['calendar:read', 'sessions:read', 'sync:read'].includes(scope) ? 'checked' : ''}>
+            <span class="text-sm font-bold text-gray-700 dark:text-dark-text">${escapeIntegrationHtml(scope)}</span>
+        </label>
+    `).join('');
+
+    const clientRows = clients.length ? clients.map(client => {
+        const scopes = Array.isArray(client.scopes) ? client.scopes.join(', ') : '';
+        const statusBadge = client.is_active
+            ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">Active</span>'
+            : '<span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-dark-bg dark:text-dark-muted">Inactive</span>';
+
+        return `
+            <tr class="border-b border-gray-100 dark:border-dark-border">
+                <td class="py-4 pr-4">
+                    <div class="font-bold text-gray-900 dark:text-white">${escapeIntegrationHtml(client.client_name)}</div>
+                    <div class="text-xs text-gray-500 dark:text-dark-muted mt-1">${escapeIntegrationHtml(client.source_system)}</div>
+                </td>
+                <td class="py-4 pr-4 font-mono text-xs text-gray-600 dark:text-dark-muted">${escapeIntegrationHtml(client.api_key_prefix)}...</td>
+                <td class="py-4 pr-4 text-xs text-gray-600 dark:text-dark-muted max-w-[220px]">${escapeIntegrationHtml(scopes)}</td>
+                <td class="py-4 pr-4">${statusBadge}</td>
+                <td class="py-4 pr-4 text-xs text-gray-500 dark:text-dark-muted">${client.last_used_at ? new Date(client.last_used_at).toLocaleString() : 'Never'}</td>
+                <td class="py-4 text-right">
+                    ${client.is_active
+                ? `<button onclick="deactivateIntegrationClient(${client.client_id})" class="px-3 py-2 rounded-xl text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition">Revoke</button>`
+                : `<button onclick="activateIntegrationClient(${client.client_id})" class="px-3 py-2 rounded-xl text-xs font-bold bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 transition">Activate</button>`
+            }
+                </td>
+            </tr>
+        `;
+    }).join('') : `
+        <tr>
+            <td colspan="6" class="py-10 text-center text-sm text-gray-500 dark:text-dark-muted">
+                No integration clients yet. Create an API key when you are ready to connect an external system.
+            </td>
+        </tr>
+    `;
+
+    const logRows = recentLogs.length ? recentLogs.map(log => `
+        <tr class="border-b border-gray-100 dark:border-dark-border">
+            <td class="py-3 pr-4 text-xs text-gray-500 dark:text-dark-muted">${new Date(log.created_at).toLocaleString()}</td>
+            <td class="py-3 pr-4 text-xs font-bold text-gray-700 dark:text-dark-text">${escapeIntegrationHtml(log.client_name || 'Unknown')}</td>
+            <td class="py-3 pr-4 text-xs font-mono text-gray-600 dark:text-dark-muted">${escapeIntegrationHtml(log.method)} ${escapeIntegrationHtml(log.endpoint)}</td>
+            <td class="py-3 text-xs font-bold ${log.status_code >= 400 ? 'text-red-600' : 'text-green-600'}">${log.status_code}</td>
+        </tr>
+    `).join('') : `
+        <tr>
+            <td colspan="4" class="py-8 text-center text-sm text-gray-500 dark:text-dark-muted">No integration activity yet.</td>
+        </tr>
+    `;
+
+    return `
+        <div>
+            <div class="flex items-center justify-between mb-8 pb-6 border-b border-gray-100 dark:border-dark-border">
+                <div>
+                    <h2 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">System Integration</h2>
+                    <p class="text-gray-500 dark:text-dark-muted text-sm mt-1">Manage API keys for external systems. Optional — LACS works without this.</p>
+                </div>
+                <div class="hidden md:block">
+                    <i class="bi bi-plug-fill text-4xl text-gray-100 dark:text-dark-border"></i>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-10">
+                <div class="xl:col-span-2 p-8 rounded-[32px] bg-gray-50/50 dark:bg-dark-bg/10 border border-gray-100 dark:border-dark-border">
+                    <h3 class="text-lg font-black text-gray-900 dark:text-white mb-2">Create Integration Client</h3>
+                    <p class="text-sm text-gray-500 dark:text-dark-muted mb-6">Issue an API key for a connected system. The full key is shown only once.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Client Name</label>
+                            <input type="text" id="integration_client_name" placeholder="Document Management System" class="w-full px-5 py-4 rounded-2xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border text-sm font-bold">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Source System ID</label>
+                            <input type="text" id="integration_source_system" placeholder="dms" class="w-full px-5 py-4 rounded-2xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border text-sm font-bold">
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 mb-6">
+                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Allowed Scopes</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">${scopeOptions}</div>
+                    </div>
+
+                    <div class="space-y-2 mb-6">
+                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Allowed IPs (optional)</label>
+                        <input type="text" id="integration_allowed_ips" placeholder="127.0.0.1, 192.168.1.10" class="w-full px-5 py-4 rounded-2xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border text-sm font-bold">
+                        <p class="text-xs text-gray-500 dark:text-dark-muted pl-1">Comma-separated. Leave blank to allow any IP.</p>
+                    </div>
+
+                    <button onclick="createIntegrationClient()" class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-red-700 text-white font-black text-sm shadow-lg shadow-red-500/20 hover:from-red-700 hover:to-red-800 transition active:scale-95">
+                        <i class="bi bi-key mr-2"></i> Generate API Key
+                    </button>
+                </div>
+
+                <div class="p-8 rounded-[32px] bg-gradient-to-br from-gray-50 to-white dark:from-dark-bg/20 dark:to-dark-card border border-gray-100 dark:border-dark-border">
+                    <h3 class="text-lg font-black text-gray-900 dark:text-white mb-4">API Reference</h3>
+                    <div class="space-y-4 text-sm">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Base URL</p>
+                            <code class="block p-3 rounded-xl bg-gray-100 dark:bg-dark-bg text-xs break-all">/api/v1/</code>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Auth Header</p>
+                            <code class="block p-3 rounded-xl bg-gray-100 dark:bg-dark-bg text-xs break-all">Authorization: Bearer &lt;api_key&gt;</code>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Electoral Term</p>
+                            <p class="text-xs font-bold text-gray-700 dark:text-dark-text">${escapeIntegrationHtml(term.start || '2025-06-30')} to ${escapeIntegrationHtml(term.end || '2028-06-30')}</p>
+                        </div>
+                        <div class="pt-2 space-y-2 text-xs text-gray-600 dark:text-dark-muted">
+                            <p><strong>GET</strong> calendar.php</p>
+                            <p><strong>GET|POST|PUT</strong> sessions.php</p>
+                            <p><strong>GET|POST</strong> sync.php</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-10 overflow-x-auto">
+                <h3 class="text-lg font-black text-gray-900 dark:text-white mb-4">Integration Clients</h3>
+                <table class="w-full min-w-[760px]">
+                    <thead>
+                        <tr class="text-left text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 dark:border-dark-border">
+                            <th class="pb-3 pr-4">Client</th>
+                            <th class="pb-3 pr-4">Key Prefix</th>
+                            <th class="pb-3 pr-4">Scopes</th>
+                            <th class="pb-3 pr-4">Status</th>
+                            <th class="pb-3 pr-4">Last Used</th>
+                            <th class="pb-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>${clientRows}</tbody>
+                </table>
+            </div>
+
+            <div class="overflow-x-auto">
+                <h3 class="text-lg font-black text-gray-900 dark:text-white mb-4">Recent Integration Activity</h3>
+                <table class="w-full min-w-[640px]">
+                    <thead>
+                        <tr class="text-left text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 dark:border-dark-border">
+                            <th class="pb-3 pr-4">Time</th>
+                            <th class="pb-3 pr-4">Client</th>
+                            <th class="pb-3 pr-4">Request</th>
+                            <th class="pb-3">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${logRows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+window.createIntegrationClient = async function () {
+    const clientName = document.getElementById('integration_client_name')?.value.trim();
+    const sourceSystem = document.getElementById('integration_source_system')?.value.trim();
+    const allowedIpsRaw = document.getElementById('integration_allowed_ips')?.value.trim();
+    const scopeInputs = document.querySelectorAll('input[name="integration_scope"]:checked');
+    const scopes = Array.from(scopeInputs).map(input => input.value);
+
+    if (!clientName || !sourceSystem) {
+        showNotification('Client name and source system ID are required', 'error');
+        return;
+    }
+    if (!scopes.length) {
+        showNotification('Select at least one scope', 'error');
+        return;
+    }
+
+    const payload = { client_name: clientName, source_system: sourceSystem, scopes };
+    if (allowedIpsRaw) {
+        payload.allowed_ips = allowedIpsRaw.split(',').map(ip => ip.trim()).filter(Boolean);
+    }
+
+    try {
+        const response = await fetch('../api/v1/clients.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (!result.success) {
+            showNotification(result.message || 'Failed to create integration client', 'error');
+            return;
+        }
+
+        showIntegrationKeyModal(result.data.api_key, result.data.client_name);
+        await loadIntegrationSettingsTab();
+    } catch (error) {
+        console.error('Create integration client failed:', error);
+        showNotification('Failed to create integration client', 'error');
+    }
+};
+
+window.showIntegrationKeyModal = function (apiKey, clientName) {
+    const existing = document.getElementById('integration-key-modal');
+    if (existing) existing.remove();
+
+    const modalHtml = `
+        <div id="integration-key-modal" class="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div class="bg-white dark:bg-dark-card rounded-[32px] shadow-2xl w-full max-w-lg border border-gray-100 dark:border-dark-border overflow-hidden">
+                <div class="p-8">
+                    <div class="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mx-auto mb-5">
+                        <i class="bi bi-key-fill text-3xl text-amber-600"></i>
+                    </div>
+                    <h3 class="text-2xl font-black text-gray-900 dark:text-white text-center mb-2">API Key Created</h3>
+                    <p class="text-sm text-gray-500 dark:text-dark-muted text-center mb-6">Copy this key for <strong>${escapeIntegrationHtml(clientName)}</strong>. It will not be shown again.</p>
+                    <div class="p-4 rounded-2xl bg-gray-50 dark:bg-dark-bg border border-gray-100 dark:border-dark-border mb-6">
+                        <code id="integration-new-api-key" class="text-xs break-all font-mono text-gray-800 dark:text-white">${escapeIntegrationHtml(apiKey)}</code>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="copyIntegrationApiKey()" class="px-4 py-3 rounded-2xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition">Copy Key</button>
+                        <button onclick="document.getElementById('integration-key-modal').remove()" class="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-dark-bg text-gray-700 dark:text-white font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.copyIntegrationApiKey = async function () {
+    const keyEl = document.getElementById('integration-new-api-key');
+    if (!keyEl) return;
+    try {
+        await navigator.clipboard.writeText(keyEl.textContent.trim());
+        showNotification('API key copied to clipboard', 'success');
+    } catch (error) {
+        showNotification('Could not copy automatically. Please copy manually.', 'info');
+    }
+};
+
+window.deactivateIntegrationClient = async function (clientId) {
+    const confirmed = await confirm('Revoke this integration client? External systems using this key will lose access.');
+    if (!confirmed) return;
+    await updateIntegrationClientStatus(clientId, false);
+};
+
+window.activateIntegrationClient = async function (clientId) {
+    await updateIntegrationClientStatus(clientId, true);
+};
+
+async function updateIntegrationClientStatus(clientId, isActive) {
+    try {
+        const response = await fetch(`../api/v1/clients.php?id=${clientId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: isActive })
+        });
+        const result = await response.json();
+
+        if (!result.success) {
+            showNotification(result.message || 'Failed to update integration client', 'error');
+            return;
+        }
+
+        showNotification(isActive ? 'Integration client activated' : 'Integration client revoked', 'success');
+        await loadIntegrationSettingsTab();
+    } catch (error) {
+        console.error('Update integration client failed:', error);
+        showNotification('Failed to update integration client', 'error');
+    }
 }
 
 // Confirmation Modal Helpers

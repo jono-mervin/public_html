@@ -31,6 +31,21 @@ if ($method === 'GET') {
         $clients[] = $row;
     }
 
+    $recentLogs = [];
+    $logResult = $conn->query("
+        SELECT l.log_id, l.endpoint, l.method, l.status_code, l.request_id, l.created_at,
+               c.client_name, c.source_system
+        FROM integration_logs l
+        LEFT JOIN integration_clients c ON c.client_id = l.client_id
+        ORDER BY l.log_id DESC
+        LIMIT 20
+    ");
+    if ($logResult) {
+        while ($row = $logResult->fetch_assoc()) {
+            $recentLogs[] = $row;
+        }
+    }
+
     integrationJsonSuccess([
         'clients' => $clients,
         'available_scopes' => INTEGRATION_SCOPES,
@@ -38,6 +53,7 @@ if ($method === 'GET') {
             'start' => INTEGRATION_TERM_START,
             'end' => INTEGRATION_TERM_END,
         ],
+        'recent_logs' => $recentLogs,
     ]);
 }
 
