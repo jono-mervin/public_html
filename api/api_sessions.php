@@ -57,7 +57,7 @@ function buildSessionTitle($sessionNumber, $sessionType) {
     if ($sessionNumber <= 0 || $sessionType === '') {
         return '';
     }
-    return SESSION_TITLE_BODY . ', ' . toOrdinalSuffix($sessionNumber) . ' ' . $sessionType;
+    return toOrdinalSuffix($sessionNumber) . ' ' . $sessionType . ' of the ' . SESSION_TITLE_BODY;
 }
 
 function parseSessionNumberFromTitle($title) {
@@ -89,6 +89,27 @@ function backfillSessionNumbers($conn) {
         }
     }
     $stmt->close();
+}
+
+function getNextConsecutiveNumber(array $usedNumbers) {
+    $used = array_values(array_unique(array_filter(array_map('intval', $usedNumbers), function ($n) {
+        return $n > 0;
+    })));
+    sort($used, SORT_NUMERIC);
+
+    $next = 1;
+    foreach ($used as $number) {
+        if ($number < $next) {
+            continue;
+        }
+        if ($number === $next) {
+            $next++;
+            continue;
+        }
+        break;
+    }
+
+    return $next;
 }
 
 function getSessionNumberStats($conn, $excludeSessionId = null, $sessionType = null) {
@@ -140,18 +161,45 @@ function getSessionNumberStats($conn, $excludeSessionId = null, $sessionType = n
     }
 
     ksort($usedNumbers, SORT_NUMERIC);
+    $usedNumberList = array_map('intval', array_keys($usedNumbers));
 
     return [
         'max_number' => $maxNumber,
-        'next_number' => $maxNumber + 1,
-        'used_numbers' => array_map('intval', array_keys($usedNumbers)),
+        'next_number' => getNextConsecutiveNumber($usedNumberList),
+        'used_numbers' => $usedNumberList,
         'used_map' => $usedNumbers,
     ];
 }
 
-function isSessionNumberTaken($conn, $sessionNumber, $excludeSessionId = null, $sessionType = null) {
+function validateSessionNumberForSave($conn, $sessionNumber, $excludeSessionId = null, $sessionType = null, $currentSessionNumber = null) {
     $stats = getSessionNumberStats($conn, $excludeSessionId, $sessionType);
-    return in_array((int) $sessionNumber, $stats['used_numbers'], true);
+    $sessionNumber = (int) $sessionNumber;
+
+    if ($sessionNumber <= 0) {
+        return ['valid' => false, 'message' => 'Invalid session number'];
+    }
+
+    if (in_array($sessionNumber, $stats['used_numbers'], true)) {
+        return ['valid' => false, 'message' => 'Session number is already in use for this session type'];
+    }
+
+    if ($currentSessionNumber !== null && $sessionNumber === (int) $currentSessionNumber) {
+        return ['valid' => true, 'stats' => $stats];
+    }
+
+    if ($sessionNumber !== $stats['next_number']) {
+        return [
+            'valid' => false,
+            'message' => 'Session number must be the next consecutive number (' . toOrdinalSuffix($stats['next_number']) . ') for this session type',
+        ];
+    }
+
+    return ['valid' => true, 'stats' => $stats];
+}
+
+function isSessionNumberTaken($conn, $sessionNumber, $excludeSessionId = null, $sessionType = null) {
+    $validation = validateSessionNumberForSave($conn, $sessionNumber, $excludeSessionId, $sessionType);
+    return !$validation['valid'] && strpos($validation['message'], 'already in use') !== false;
 }
 
 switch ($method) {
@@ -1278,9 +1326,10 @@ switch ($method) {
         $sessionNumber = isset($input['session_number']) ? (int) $input['session_number'] : null;
 
         if ($sessionNumber !== null && $sessionNumber > 0) {
-            if (isSessionNumberTaken($conn, $sessionNumber, null, $sessionType)) {
+            $validation = validateSessionNumberForSave($conn, $sessionNumber, null, $sessionType);
+            if (!$validation['valid']) {
                 http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Session number is already in use for this session type']);
+                echo json_encode(['success' => false, 'message' => $validation['message']]);
                 exit;
             }
             $title = buildSessionTitle($sessionNumber, $sessionType);
@@ -1666,10 +1715,34 @@ switch ($method) {
 
         ensureSessionNumberColumn($conn);
 
+        $currentSessionNumber = null;
         if ($sessionNumber !== null && $sessionNumber > 0) {
-            if (isSessionNumberTaken($conn, $sessionNumber, $sessionId, $sessionType)) {
+            $currentStmt = $conn->prepare("SELECT session_number, session_type FROM sessions WHERE session_id = ?");
+            if ($currentStmt) {
+                $currentStmt->bind_param('i', $sessionId);
+                $currentStmt->execute();
+                $currentResult = $currentStmt->get_result();
+                if ($currentRow = $currentResult->fetch_assoc()) {
+                    if (!empty($currentRow['session_number'])) {
+                        $currentSessionNumber = (int) $currentRow['session_number'];
+                    }
+                    if ($sessionType === null) {
+                        $sessionType = $currentRow['session_type'];
+                    }
+                }
+                $currentStmt->close();
+            }
+
+            $validation = validateSessionNumberForSave(
+                $conn,
+                $sessionNumber,
+                $sessionId,
+                $sessionType,
+                $currentSessionNumber
+            );
+            if (!$validation['valid']) {
                 http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Session number is already in use for this session type']);
+                echo json_encode(['success' => false, 'message' => $validation['message']]);
                 exit;
             }
         }

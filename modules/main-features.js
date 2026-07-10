@@ -14774,7 +14774,7 @@ function buildSessionTitle(sessionNumber, sessionType, titleBody = SESSION_TITLE
     const n = parseInt(sessionNumber, 10);
     const type = (sessionType || '').trim();
     if (!n || n <= 0 || !type) return '';
-    return `${titleBody}, ${toOrdinalSuffix(n)} ${type}`;
+    return `${toOrdinalSuffix(n)} ${type} of the ${titleBody}`;
 }
 
 function parseSessionNumberFromTitle(title) {
@@ -14803,27 +14803,46 @@ async function fetchSessionNumberStats(excludeSessionId = null, sessionType = nu
     return data;
 }
 
-function populateSessionNumberDropdown(selectEl, stats, selectedNumber = null) {
+function populateSessionNumberDropdown(selectEl, stats, selectedNumber = null, isCreate = true) {
     if (!selectEl || !stats) return;
 
     const used = new Set((stats.used_numbers || []).map(Number));
     const nextNumber = stats.next_number || 1;
     const defaultNumber = selectedNumber || nextNumber;
-    const maxOption = Math.max(nextNumber + 5, defaultNumber, ...(stats.used_numbers || []).map(Number));
 
     selectEl.innerHTML = '';
 
-    for (let n = 1; n <= maxOption; n++) {
+    const sortedUsed = [...used].sort((a, b) => a - b);
+    sortedUsed.forEach((n) => {
         const option = document.createElement('option');
         option.value = String(n);
-        option.textContent = `${toOrdinalSuffix(n)} Session`;
-        if (used.has(n) && n !== defaultNumber) {
-            option.disabled = true;
-            option.textContent += ' (in use)';
-        }
+        option.textContent = `${toOrdinalSuffix(n)} (in use)`;
+        option.disabled = true;
+        selectEl.appendChild(option);
+    });
+
+    const selectable = new Set([nextNumber]);
+    if (!isCreate && defaultNumber && !used.has(defaultNumber)) {
+        selectable.add(defaultNumber);
+    }
+
+    [...selectable].sort((a, b) => a - b).forEach((n) => {
+        if (used.has(n)) return;
+
+        const option = document.createElement('option');
+        option.value = String(n);
+        option.textContent = toOrdinalSuffix(n);
         if (n === defaultNumber) {
             option.selected = true;
         }
+        selectEl.appendChild(option);
+    });
+
+    if (selectEl.options.length === 0) {
+        const option = document.createElement('option');
+        option.value = String(nextNumber);
+        option.textContent = toOrdinalSuffix(nextNumber);
+        option.selected = true;
         selectEl.appendChild(option);
     }
 }
@@ -14835,7 +14854,7 @@ function updateSessionTitlePreview(numberSelect, typeSelect, titlePreview, title
     }
 }
 
-async function refreshSessionNumberDropdown({ numberSelectId, typeSelectId, excludeSessionId, selectedNumber = null }) {
+async function refreshSessionNumberDropdown({ numberSelectId, typeSelectId, excludeSessionId, selectedNumber = null, isCreate = true }) {
     const numberSelect = document.getElementById(numberSelectId);
     const typeSelect = document.getElementById(typeSelectId);
     if (!numberSelect) return null;
@@ -14846,20 +14865,19 @@ async function refreshSessionNumberDropdown({ numberSelectId, typeSelectId, excl
         return null;
     }
 
-    const previousSelection = parseInt(numberSelect.value, 10);
     const stats = await fetchSessionNumberStats(excludeSessionId, sessionType);
     const used = new Set((stats.used_numbers || []).map(Number));
+    const nextNumber = stats.next_number || 1;
 
     let defaultNumber = selectedNumber;
-    if (!defaultNumber) {
-        if (previousSelection && !used.has(previousSelection)) {
-            defaultNumber = previousSelection;
-        } else {
-            defaultNumber = stats.next_number || 1;
-        }
+    if (!defaultNumber || (isCreate && defaultNumber !== nextNumber) || (!isCreate && used.has(defaultNumber) && defaultNumber !== selectedNumber)) {
+        defaultNumber = isCreate ? nextNumber : (selectedNumber && !used.has(selectedNumber) ? selectedNumber : nextNumber);
+    }
+    if (isCreate) {
+        defaultNumber = nextNumber;
     }
 
-    populateSessionNumberDropdown(numberSelect, stats, defaultNumber);
+    populateSessionNumberDropdown(numberSelect, stats, defaultNumber, isCreate);
     return stats;
 }
 
@@ -14873,7 +14891,7 @@ function bindAutoSessionTitle(numberSelectId, typeSelectId, titlePreviewId, titl
     });
 }
 
-async function initSessionTitleControls({ numberSelectId, typeSelectId, titlePreviewId, excludeSessionId = null, selectedNumber = null }) {
+async function initSessionTitleControls({ numberSelectId, typeSelectId, titlePreviewId, excludeSessionId = null, selectedNumber = null, isCreate = true }) {
     const numberSelect = document.getElementById(numberSelectId);
     const typeSelect = document.getElementById(typeSelectId);
     const titlePreview = document.getElementById(titlePreviewId);
@@ -14887,7 +14905,8 @@ async function initSessionTitleControls({ numberSelectId, typeSelectId, titlePre
                 numberSelectId,
                 typeSelectId,
                 excludeSessionId,
-                selectedNumber: keepSelectedNumber
+                selectedNumber: keepSelectedNumber,
+                isCreate
             });
             if (stats) {
                 titleBody = stats.title_body || SESSION_TITLE_BODY;
@@ -14934,7 +14953,6 @@ window.openCreateSessionModal = function (prefillDate = null) {
                             <select name="session_number" id="create-session-number" required class="w-full px-4 py-3 border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
                                 <option value="">Loading...</option>
                             </select>
-                            <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Select the nth session for this session type (based on existing sessions of the same type)</p>
                         </div>
 
                         <div>
@@ -14950,7 +14968,6 @@ window.openCreateSessionModal = function (prefillDate = null) {
                         <div class="md:col-span-2">
                             <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Session Title</label>
                             <input type="text" id="create-session-title-preview" readonly placeholder="Auto-generated from session number and type" class="w-full px-4 py-3 border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg/70 dark:text-white rounded-lg cursor-not-allowed transition">
-                            <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Always includes <span class="font-medium">${SESSION_TITLE_BODY}</span></p>
                         </div>
 
                         <div>
@@ -15065,7 +15082,8 @@ window.openCreateSessionModal = function (prefillDate = null) {
         initSessionTitleControls({
             numberSelectId: 'create-session-number',
             typeSelectId: 'create-session-type',
-            titlePreviewId: 'create-session-title-preview'
+            titlePreviewId: 'create-session-title-preview',
+            isCreate: true
         });
 
         try {
@@ -16372,7 +16390,6 @@ window.editSession = async function (sessionId) {
                             <select name="session_number" id="edit-session-number" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
                                 <option value="">Loading...</option>
                             </select>
-                            <p class="text-xs text-gray-500 mt-1">Select the nth session for this session type (based on existing sessions of the same type)</p>
                         </div>
 
                         <div>
@@ -16388,7 +16405,7 @@ window.editSession = async function (sessionId) {
                         <div class="md:col-span-2">
                             <label class="block text-sm font-semibold text-gray-700 mb-2">Session Title</label>
                             <input type="text" id="edit-session-title-preview" readonly value="${session.title || ''}" class="w-full px-4 py-3 border border-gray-200 bg-gray-50 rounded-lg cursor-not-allowed transition">
-                            <p class="text-xs text-gray-500 mt-1">Always includes <span class="font-medium">${SESSION_TITLE_BODY}</span></p>
+                            <p class="text-xs text-gray-500 mt-1">Format: <span class="font-medium">[Nth] [Type] of the ${SESSION_TITLE_BODY}</span></p>
                         </div>
 
                         <div>
@@ -16466,7 +16483,8 @@ window.editSession = async function (sessionId) {
             typeSelectId: 'edit-session-type',
             titlePreviewId: 'edit-session-title-preview',
             excludeSessionId: sessionId,
-            selectedNumber: currentSessionNumber
+            selectedNumber: currentSessionNumber,
+            isCreate: false
         });
 
         try {
