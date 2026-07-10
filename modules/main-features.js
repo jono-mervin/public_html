@@ -951,7 +951,7 @@ function checkAccess(sectionId) {
     // Define permissions
     const permissions = {
         'Super Admin': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'audit', 'settings', 'public-portal', 'profile'],
-        'Admin': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'public-portal', 'profile'],
+        'Admin': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'audit', 'settings', 'public-portal', 'profile'],
         'Administrator': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'reminders', 'notifications', 'users', 'analytics', 'audit', 'settings', 'public-portal', 'profile'],
         'Staff': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'notifications', 'profile', 'analytics'],
         'User - Committee': ['dashboard', 'calendar', 'sessions', 'agendas', 'deadlines', 'notifications', 'profile', 'analytics']
