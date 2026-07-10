@@ -7392,19 +7392,27 @@ function calculateQuorum() {
 function loadSessionTemplate(type) {
     if (!type) return;
 
-    const titleInput = document.querySelector('#createSessionModal input[placeholder*="Session Title"]');
-    const typeSelect = document.querySelector('#createSessionModal select:nth-of-type(2)'); // Assuming 2nd select is type
+    const typeSelect = document.getElementById('create-session-type');
     const descTextarea = document.querySelector('#createSessionModal textarea');
 
-    if (type === 'regular') {
-        titleInput.value = '56th Regular Session';
-        descTextarea.value = 'Regular session to discuss pending ordinances and resolutions.';
-    } else if (type === 'special') {
-        titleInput.value = 'Special Session on [Topic]';
-        descTextarea.value = 'Special session called to address urgent matters regarding...';
-    } else if (type === 'emergency') {
-        titleInput.value = 'Emergency Session - [Urgent Matter]';
-        descTextarea.value = 'Emergency session for immediate action on...';
+    if (type === 'regular' && typeSelect) {
+        typeSelect.value = 'Regular Session';
+    } else if (type === 'special' && typeSelect) {
+        typeSelect.value = 'Special Session';
+    } else if (type === 'emergency' && typeSelect) {
+        typeSelect.value = 'Emergency Session';
+    }
+
+    typeSelect?.dispatchEvent(new Event('change'));
+
+    if (descTextarea) {
+        if (type === 'regular') {
+            descTextarea.value = 'Regular session to discuss pending ordinances and resolutions.';
+        } else if (type === 'special') {
+            descTextarea.value = 'Special session called to address urgent matters regarding...';
+        } else if (type === 'emergency') {
+            descTextarea.value = 'Emergency session for immediate action on...';
+        }
     }
 
     showNotification('Template loaded successfully', 'success');
@@ -14747,6 +14755,156 @@ window.loadVenueDropdown = async function (selectId, tooltipId, addressTextId, s
     }
 };
 
+const SESSION_TITLE_BODY = 'Sangguniang Panlungsod ng Valenzuela';
+
+function toOrdinalSuffix(number) {
+    const n = parseInt(number, 10);
+    if (!n || n <= 0) return '';
+    if (![11, 12, 13].includes(n % 100)) {
+        switch (n % 10) {
+            case 1: return `${n}st`;
+            case 2: return `${n}nd`;
+            case 3: return `${n}rd`;
+        }
+    }
+    return `${n}th`;
+}
+
+function buildSessionTitle(sessionNumber, sessionType, titleBody = SESSION_TITLE_BODY) {
+    const n = parseInt(sessionNumber, 10);
+    const type = (sessionType || '').trim();
+    if (!n || n <= 0 || !type) return '';
+    return `${titleBody}, ${toOrdinalSuffix(n)} ${type}`;
+}
+
+function parseSessionNumberFromTitle(title) {
+    const text = String(title || '').trim();
+    const typeMatch = text.match(/(\d+)(?:st|nd|rd|th)\s+(?:Regular|Special|Emergency)\s+Session/i);
+    if (typeMatch) {
+        return parseInt(typeMatch[1], 10);
+    }
+    const startMatch = text.match(/^(\d+)(?:st|nd|rd|th)\b/i);
+    return startMatch ? parseInt(startMatch[1], 10) : null;
+}
+
+async function fetchSessionNumberStats(excludeSessionId = null, sessionType = null) {
+    let url = '../api/api_sessions.php?session_numbers=1';
+    if (excludeSessionId) {
+        url += `&exclude_id=${excludeSessionId}`;
+    }
+    if (sessionType) {
+        url += `&session_type=${encodeURIComponent(sessionType)}`;
+    }
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!data.success) {
+        throw new Error(data.message || 'Failed to load session numbers');
+    }
+    return data;
+}
+
+function populateSessionNumberDropdown(selectEl, stats, selectedNumber = null) {
+    if (!selectEl || !stats) return;
+
+    const used = new Set((stats.used_numbers || []).map(Number));
+    const nextNumber = stats.next_number || 1;
+    const defaultNumber = selectedNumber || nextNumber;
+    const maxOption = Math.max(nextNumber + 5, defaultNumber, ...(stats.used_numbers || []).map(Number));
+
+    selectEl.innerHTML = '';
+
+    for (let n = 1; n <= maxOption; n++) {
+        const option = document.createElement('option');
+        option.value = String(n);
+        option.textContent = `${toOrdinalSuffix(n)} Session`;
+        if (used.has(n) && n !== defaultNumber) {
+            option.disabled = true;
+            option.textContent += ' (in use)';
+        }
+        if (n === defaultNumber) {
+            option.selected = true;
+        }
+        selectEl.appendChild(option);
+    }
+}
+
+function updateSessionTitlePreview(numberSelect, typeSelect, titlePreview, titleBody = SESSION_TITLE_BODY) {
+    const title = buildSessionTitle(numberSelect?.value, typeSelect?.value, titleBody);
+    if (titlePreview) {
+        titlePreview.value = title || 'Select session number and type to generate title';
+    }
+}
+
+async function refreshSessionNumberDropdown({ numberSelectId, typeSelectId, excludeSessionId, selectedNumber = null }) {
+    const numberSelect = document.getElementById(numberSelectId);
+    const typeSelect = document.getElementById(typeSelectId);
+    if (!numberSelect) return null;
+
+    const sessionType = typeSelect?.value?.trim() || '';
+    if (!sessionType) {
+        numberSelect.innerHTML = '<option value="">Select session type first</option>';
+        return null;
+    }
+
+    const previousSelection = parseInt(numberSelect.value, 10);
+    const stats = await fetchSessionNumberStats(excludeSessionId, sessionType);
+    const used = new Set((stats.used_numbers || []).map(Number));
+
+    let defaultNumber = selectedNumber;
+    if (!defaultNumber) {
+        if (previousSelection && !used.has(previousSelection)) {
+            defaultNumber = previousSelection;
+        } else {
+            defaultNumber = stats.next_number || 1;
+        }
+    }
+
+    populateSessionNumberDropdown(numberSelect, stats, defaultNumber);
+    return stats;
+}
+
+function bindAutoSessionTitle(numberSelectId, typeSelectId, titlePreviewId, titleBody = SESSION_TITLE_BODY) {
+    const numberSelect = document.getElementById(numberSelectId);
+    const typeSelect = document.getElementById(typeSelectId);
+    const titlePreview = document.getElementById(titlePreviewId);
+
+    numberSelect?.addEventListener('change', () => {
+        updateSessionTitlePreview(numberSelect, typeSelect, titlePreview, titleBody);
+    });
+}
+
+async function initSessionTitleControls({ numberSelectId, typeSelectId, titlePreviewId, excludeSessionId = null, selectedNumber = null }) {
+    const numberSelect = document.getElementById(numberSelectId);
+    const typeSelect = document.getElementById(typeSelectId);
+    const titlePreview = document.getElementById(titlePreviewId);
+    if (!numberSelect) return;
+
+    let titleBody = SESSION_TITLE_BODY;
+
+    const refreshNumbers = async (keepSelectedNumber = null) => {
+        try {
+            const stats = await refreshSessionNumberDropdown({
+                numberSelectId,
+                typeSelectId,
+                excludeSessionId,
+                selectedNumber: keepSelectedNumber
+            });
+            if (stats) {
+                titleBody = stats.title_body || SESSION_TITLE_BODY;
+            }
+            updateSessionTitlePreview(numberSelect, typeSelect, titlePreview, titleBody);
+        } catch (error) {
+            console.error('Error loading session numbers:', error);
+            numberSelect.innerHTML = '<option value="">Failed to load session numbers</option>';
+        }
+    };
+
+    typeSelect?.addEventListener('change', () => refreshNumbers());
+
+    bindAutoSessionTitle(numberSelectId, typeSelectId, titlePreviewId, titleBody);
+    await refreshNumbers(selectedNumber);
+}
+
 window.openCreateSessionModal = function (prefillDate = null) {
     const existing = document.getElementById('createSessionModal');
     if (existing) existing.remove();
@@ -14771,19 +14929,28 @@ window.openCreateSessionModal = function (prefillDate = null) {
                 </div>
                 <form onsubmit="saveSession(event)" class="space-y-5 flex-1 overflow-y-auto pr-2" style="scrollbar-width: thin;">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Session Title <span class="text-red-500">*</span></label>
-                            <input type="text" name="title" required placeholder="e.g., 2nd Sangguniang Panglungsod ng Valenzuela, 13th Regular Session" class="w-full px-4 py-3 border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Session Number <span class="text-red-500">*</span></label>
+                            <select name="session_number" id="create-session-number" required class="w-full px-4 py-3 border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                                <option value="">Loading...</option>
+                            </select>
+                            <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Select the nth session for this session type (based on existing sessions of the same type)</p>
                         </div>
-                        
+
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Session Type <span class="text-red-500">*</span></label>
-                            <select name="session_type" required class="w-full px-4 py-3 border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                            <select name="session_type" id="create-session-type" required class="w-full px-4 py-3 border border-gray-300 dark:border-dark-border dark:bg-dark-bg dark:text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
                                 <option value="">Select Type</option>
                                 <option value="Regular Session">Regular Session</option>
                                 <option value="Special Session">Special Session</option>
                                 <option value="Emergency Session">Emergency Session</option>
                             </select>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Session Title</label>
+                            <input type="text" id="create-session-title-preview" readonly placeholder="Auto-generated from session number and type" class="w-full px-4 py-3 border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg/70 dark:text-white rounded-lg cursor-not-allowed transition">
+                            <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Always includes <span class="font-medium">${SESSION_TITLE_BODY}</span></p>
                         </div>
 
                         <div>
@@ -14895,6 +15062,12 @@ window.openCreateSessionModal = function (prefillDate = null) {
 
     // Load members for presiding officer dropdown, venues, and staff for assignment
     setTimeout(async () => {
+        initSessionTitleControls({
+            numberSelectId: 'create-session-number',
+            typeSelectId: 'create-session-type',
+            titlePreviewId: 'create-session-title-preview'
+        });
+
         try {
             // Load members for presiding officer
             const response = await fetch('../api/api_sessions.php?members=1');
@@ -14933,8 +15106,10 @@ window.openCreateSessionModal = function (prefillDate = null) {
             const staffContainer = document.getElementById('create-session-staff-container');
 
             if (staffContainer && userData.success && userData.users) {
-                // Filter only 'User' role based on database
-                const staffUsers = userData.users.filter(u => u.user_role === 'User - Committee');
+                const staffUsers = userData.users.filter(u =>
+                    ['User', 'Staff'].includes(u.user_role) &&
+                    (u.status || 'Active') === 'Active'
+                );
 
                 if (staffUsers.length === 0) {
                     staffContainer.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">No users found</p>';
@@ -14988,7 +15163,7 @@ window.saveSession = async function (event) {
     // Get base session data
     const venueId = formData.get('venue_id');
     const baseData = {
-        title: formData.get('title'),
+        session_number: parseInt(formData.get('session_number'), 10),
         session_type: formData.get('session_type'),
         session_date: formData.get('session_date'),
         start_time: formData.get('start_time'),
@@ -14997,6 +15172,11 @@ window.saveSession = async function (event) {
         venue_id: venueId ? parseInt(venueId) : null,
         presiding_officer: formData.get('presiding_officer') || null
     };
+
+    if (!baseData.session_number || !baseData.session_type) {
+        showNotification('Please select a session number and session type', 'error');
+        return;
+    }
 
     // Get assigned staff user IDs
     const assignedStaffIds = formData.getAll('assigned_staff[]').map(id => parseInt(id));
@@ -15287,6 +15467,7 @@ async function createRecurringSessions(baseData, repeatDays, repeatWeeks) {
     const baseDate = new Date(baseData.session_date);
     const sessionsToCreate = [];
     const baseDayOfWeek = baseDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    let nextSessionNumber = baseData.session_number;
 
     // Generate dates for each selected day over the specified weeks
     for (let week = 0; week < repeatWeeks; week++) {
@@ -15307,10 +15488,11 @@ async function createRecurringSessions(baseData, repeatDays, repeatWeeks) {
 
             const sessionData = {
                 ...baseData,
-                session_date: sessionDate.toISOString().split('T')[0],
-                title: repeatWeeks > 1 ? `${baseData.title} (Week ${week + 1})` : baseData.title
+                session_number: nextSessionNumber,
+                session_date: sessionDate.toISOString().split('T')[0]
             };
             sessionsToCreate.push(sessionData);
+            nextSessionNumber++;
         });
     }
 
@@ -16164,6 +16346,9 @@ window.editSession = async function (sessionId) {
     if (existing) existing.remove();
 
     const today = new Date().toISOString().split('T')[0];
+    const currentSessionNumber = session.session_number
+        ? parseInt(session.session_number, 10)
+        : parseSessionNumberFromTitle(session.title);
 
     const modalHtml = `
         <div id="editSessionModal" class="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50 backdrop-blur-sm">
@@ -16182,19 +16367,28 @@ window.editSession = async function (sessionId) {
                 </div>
                 <form onsubmit="updateSession(event, ${sessionId})" class="space-y-5">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">Session Title *</label>
-                            <input type="text" name="title" required value="${session.title}" placeholder="e.g., 54th Regular Session" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Session Number *</label>
+                            <select name="session_number" id="edit-session-number" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                                <option value="">Loading...</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Select the nth session for this session type (based on existing sessions of the same type)</p>
                         </div>
-                        
+
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-2">Session Type *</label>
-                            <select name="session_type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
+                            <select name="session_type" id="edit-session-type" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition">
                                 <option value="">Select Type</option>
                                 <option value="Regular Session" ${session.session_type === 'Regular Session' ? 'selected' : ''}>Regular Session</option>
                                 <option value="Special Session" ${session.session_type === 'Special Session' ? 'selected' : ''}>Special Session</option>
                                 <option value="Emergency Session" ${session.session_type === 'Emergency Session' ? 'selected' : ''}>Emergency Session</option>
                             </select>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Session Title</label>
+                            <input type="text" id="edit-session-title-preview" readonly value="${session.title || ''}" class="w-full px-4 py-3 border border-gray-200 bg-gray-50 rounded-lg cursor-not-allowed transition">
+                            <p class="text-xs text-gray-500 mt-1">Always includes <span class="font-medium">${SESSION_TITLE_BODY}</span></p>
                         </div>
 
                         <div>
@@ -16267,6 +16461,14 @@ window.editSession = async function (sessionId) {
 
     // Load members for presiding officer dropdown and venues
     setTimeout(async () => {
+        initSessionTitleControls({
+            numberSelectId: 'edit-session-number',
+            typeSelectId: 'edit-session-type',
+            titlePreviewId: 'edit-session-title-preview',
+            excludeSessionId: sessionId,
+            selectedNumber: currentSessionNumber
+        });
+
         try {
             const response = await fetch('../api/api_sessions.php?members=1');
             const data = await response.json();
@@ -16303,6 +16505,12 @@ window.updateSession = async function (event, sessionId) {
     const formData = new FormData(event.target);
     const data = Object.fromEntries(formData.entries());
     data.session_id = sessionId;
+    data.session_number = parseInt(data.session_number, 10);
+
+    if (!data.session_number || !data.session_type) {
+        showNotification('Please select a session number and session type', 'error');
+        return;
+    }
 
     try {
         const response = await fetch('../api/api_sessions.php', {

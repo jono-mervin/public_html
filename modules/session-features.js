@@ -1351,9 +1351,10 @@ window.openManageStaffModal = async function (sessionId) {
             return;
         }
 
-        // Filter only 'User' and 'Staff' roles
-        // Filter only 'User' role based on database
-        const staffUsers = userData.users.filter(u => u.user_role === 'User - Committee');
+        const staffUsers = userData.users.filter(u =>
+            ['User', 'Staff'].includes(u.user_role) &&
+            (u.status || 'Active') === 'Active'
+        );
 
         // Get current session data to see existing assignments
         const sessionRes = await fetch(`../ api / api_sessions.php ? id = ${sessionId} `);

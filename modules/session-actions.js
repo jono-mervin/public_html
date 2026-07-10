@@ -758,8 +758,10 @@ window.assignSessionStaff = async function (sessionId) {
 
         const session = sessionData.session;
         const allUsers = usersData.users || [];
-        // Only active "User" role accounts can be assigned
-        const staffUsers = allUsers.filter(u => u.user_role === 'User - Committee' && (u.status || 'Active') === 'Active');
+        const staffUsers = allUsers.filter(u =>
+            ['User', 'Staff'].includes(u.user_role) &&
+            (u.status || 'Active') === 'Active'
+        );
 
         const currentAssignments = session.assigned_staff ? session.assigned_staff.map(s => parseInt(s.user_id)) : [];
 

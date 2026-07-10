@@ -27,6 +27,133 @@ if (!$isAuthenticated) {
 $method = $_SERVER['REQUEST_METHOD'];
 $conn = getDBConnection();
 
+define('SESSION_TITLE_BODY', 'Sangguniang Panlungsod ng Valenzuela');
+
+function ensureSessionNumberColumn($conn) {
+    $check = $conn->query("SHOW COLUMNS FROM sessions LIKE 'session_number'");
+    if ($check && $check->num_rows === 0) {
+        $conn->query("ALTER TABLE sessions ADD COLUMN session_number INT NULL DEFAULT NULL AFTER title");
+    }
+}
+
+function toOrdinalSuffix($number) {
+    $number = (int) $number;
+    if ($number <= 0) {
+        return '';
+    }
+    if (!in_array($number % 100, [11, 12, 13], true)) {
+        switch ($number % 10) {
+            case 1: return $number . 'st';
+            case 2: return $number . 'nd';
+            case 3: return $number . 'rd';
+        }
+    }
+    return $number . 'th';
+}
+
+function buildSessionTitle($sessionNumber, $sessionType) {
+    $sessionNumber = (int) $sessionNumber;
+    $sessionType = trim((string) $sessionType);
+    if ($sessionNumber <= 0 || $sessionType === '') {
+        return '';
+    }
+    return SESSION_TITLE_BODY . ', ' . toOrdinalSuffix($sessionNumber) . ' ' . $sessionType;
+}
+
+function parseSessionNumberFromTitle($title) {
+    $title = trim((string) $title);
+    if (preg_match('/(\d+)(?:st|nd|rd|th)\s+(?:Regular|Special|Emergency)\s+Session/i', $title, $matches)) {
+        return (int) $matches[1];
+    }
+    if (preg_match('/^(\d+)(?:st|nd|rd|th)\b/i', $title, $matches)) {
+        return (int) $matches[1];
+    }
+    return null;
+}
+
+function backfillSessionNumbers($conn) {
+    ensureSessionNumberColumn($conn);
+    $result = $conn->query("SELECT session_id, title, session_number FROM sessions WHERE session_number IS NULL OR session_number = 0");
+    if (!$result) {
+        return;
+    }
+    $stmt = $conn->prepare("UPDATE sessions SET session_number = ? WHERE session_id = ?");
+    if (!$stmt) {
+        return;
+    }
+    while ($row = $result->fetch_assoc()) {
+        $parsed = parseSessionNumberFromTitle($row['title']);
+        if ($parsed !== null && $parsed > 0) {
+            $stmt->bind_param('ii', $parsed, $row['session_id']);
+            $stmt->execute();
+        }
+    }
+    $stmt->close();
+}
+
+function getSessionNumberStats($conn, $excludeSessionId = null, $sessionType = null) {
+    ensureSessionNumberColumn($conn);
+    backfillSessionNumbers($conn);
+
+    $sql = "SELECT session_id, session_number, title, session_type FROM sessions WHERE session_status = 'Active'";
+    $params = [];
+    $types = '';
+
+    if ($excludeSessionId !== null) {
+        $sql .= " AND session_id != ?";
+        $params[] = (int) $excludeSessionId;
+        $types .= 'i';
+    }
+    if ($sessionType !== null && trim($sessionType) !== '') {
+        $sql .= " AND session_type = ?";
+        $params[] = trim($sessionType);
+        $types .= 's';
+    }
+
+    if (!empty($params)) {
+        $stmt = $conn->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param($types, ...$params);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $stmt->close();
+        } else {
+            $result = false;
+        }
+    } else {
+        $result = $conn->query($sql);
+    }
+
+    $usedNumbers = [];
+    $maxNumber = 0;
+
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $number = !empty($row['session_number']) ? (int) $row['session_number'] : parseSessionNumberFromTitle($row['title']);
+            if ($number !== null && $number > 0) {
+                $usedNumbers[$number] = (int) $row['session_id'];
+                if ($number > $maxNumber) {
+                    $maxNumber = $number;
+                }
+            }
+        }
+    }
+
+    ksort($usedNumbers, SORT_NUMERIC);
+
+    return [
+        'max_number' => $maxNumber,
+        'next_number' => $maxNumber + 1,
+        'used_numbers' => array_map('intval', array_keys($usedNumbers)),
+        'used_map' => $usedNumbers,
+    ];
+}
+
+function isSessionNumberTaken($conn, $sessionNumber, $excludeSessionId = null, $sessionType = null) {
+    $stats = getSessionNumberStats($conn, $excludeSessionId, $sessionType);
+    return in_array((int) $sessionNumber, $stats['used_numbers'], true);
+}
+
 switch ($method) {
     case 'GET':
         try {
@@ -56,6 +183,22 @@ switch ($method) {
             }
             echo json_encode(['success' => true, 'members' => $members]);
             $membersStmt->close();
+            exit;
+        }
+
+        // Session number stats for auto-generated titles
+        if (isset($_GET['session_numbers']) && $_GET['session_numbers'] == '1') {
+            $excludeSessionId = isset($_GET['exclude_id']) ? (int) $_GET['exclude_id'] : null;
+            $sessionType = isset($_GET['session_type']) ? trim($_GET['session_type']) : null;
+            $stats = getSessionNumberStats($conn, $excludeSessionId, $sessionType);
+            echo json_encode([
+                'success' => true,
+                'title_body' => SESSION_TITLE_BODY,
+                'session_type' => $sessionType,
+                'max_number' => $stats['max_number'],
+                'next_number' => $stats['next_number'],
+                'used_numbers' => $stats['used_numbers'],
+            ]);
             exit;
         }
 
@@ -1117,16 +1260,43 @@ switch ($method) {
 
         // Validate required fields
         if (
-            !isset($input['title']) || !isset($input['session_type']) || !isset($input['session_date'])
+            !isset($input['session_type']) || !isset($input['session_date']) ||
+            (
+                !isset($input['session_number']) &&
+                (!isset($input['title']) || trim((string) $input['title']) === '')
+            )
         ) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'Missing required fields']);
             exit;
         }
 
-        $title = trim($input['title']);
+        ensureSessionNumberColumn($conn);
+
         $sessionType = $input['session_type'];
         $sessionDate = $input['session_date'];
+        $sessionNumber = isset($input['session_number']) ? (int) $input['session_number'] : null;
+
+        if ($sessionNumber !== null && $sessionNumber > 0) {
+            if (isSessionNumberTaken($conn, $sessionNumber, null, $sessionType)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Session number is already in use for this session type']);
+                exit;
+            }
+            $title = buildSessionTitle($sessionNumber, $sessionType);
+        } else {
+            $title = trim($input['title'] ?? '');
+            $parsedNumber = parseSessionNumberFromTitle($title);
+            if ($parsedNumber !== null && $parsedNumber > 0) {
+                $sessionNumber = $parsedNumber;
+            }
+        }
+
+        if ($title === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+            exit;
+        }
         // Handle both start_time/end_time (for compatibility) and actual_start_time/actual_end_time
         $actualStart = null;
         $actualEnd = null;
@@ -1180,6 +1350,12 @@ switch ($method) {
         $fields = ['title', 'session_type', 'session_date', 'status', 'created_by', 'session_status'];
         $values = [$title, $sessionType, $sessionDate, $status, $_SESSION['user_id'], 'Active'];
         $types = 'ssssis';
+
+        if ($sessionNumber !== null && $sessionNumber > 0) {
+            $fields[] = 'session_number';
+            $values[] = $sessionNumber;
+            $types .= 'i';
+        }
 
         if ($actualStart && $actualEnd) {
             $fields[] = 'actual_start_time';
@@ -1486,6 +1662,26 @@ switch ($method) {
         $title = isset($input['title']) ? trim($input['title']) : null;
         $sessionType = isset($input['session_type']) ? $input['session_type'] : null;
         $sessionDate = isset($input['session_date']) ? $input['session_date'] : null;
+        $sessionNumber = isset($input['session_number']) ? (int) $input['session_number'] : null;
+
+        ensureSessionNumberColumn($conn);
+
+        if ($sessionNumber !== null && $sessionNumber > 0) {
+            if (isSessionNumberTaken($conn, $sessionNumber, $sessionId, $sessionType)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Session number is already in use for this session type']);
+                exit;
+            }
+        }
+
+        if ($sessionNumber !== null && $sessionNumber > 0 && $sessionType !== null) {
+            $title = buildSessionTitle($sessionNumber, $sessionType);
+        } elseif ($title !== null && $title !== '') {
+            $parsedNumber = parseSessionNumberFromTitle($title);
+            if ($parsedNumber !== null && $parsedNumber > 0) {
+                $sessionNumber = $parsedNumber;
+            }
+        }
         // Handle both actual_start/actual_end and start_time/end_time for compatibility
         // Note: DB columns `actual_start_time` / `actual_end_time` are TIME, so we must store time-only values.
         $actualStart = isset($input['actual_start']) ? $input['actual_start'] : null;
@@ -1535,6 +1731,11 @@ switch ($method) {
             $updates[] = "session_type = ?";
             $params[] = $sessionType;
             $types .= 's';
+        }
+        if ($sessionNumber !== null && $sessionNumber > 0) {
+            $updates[] = "session_number = ?";
+            $params[] = $sessionNumber;
+            $types .= 'i';
         }
         if ($sessionDate !== null) {
             $updates[] = "session_date = ?";
