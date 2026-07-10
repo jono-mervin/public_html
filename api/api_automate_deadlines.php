@@ -58,7 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'deadline_id' => $deadlineId
         ]);
 
-        // TODO: Add notification logic here if assignedTo is set
+        // Add notification logic if assignedTo is set
+        if ($assignedTo) {
+            $notifType = 'Task Assigned';
+            $notifMsg = "A new task has been assigned to you: '" . $title . "'. Due date: " . date('M d, Y', strtotime($dueDate));
+            $notifLink = 'deadlines'; 
+            $nstmt = $conn->prepare("INSERT INTO notifications (user_id, type, message, link, created_at) VALUES (?, ?, ?, ?, NOW())");
+            if ($nstmt) {
+                $nstmt->bind_param("isss", $assignedTo, $notifType, $notifMsg, $notifLink);
+                $nstmt->execute();
+                $nstmt->close();
+            }
+        }
     } else {
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Failed to create deadline: ' . $stmt->error]);

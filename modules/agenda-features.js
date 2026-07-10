@@ -857,22 +857,15 @@ window.openCreateAgendaItemModal = async function (agendaId, agendaTitle, sessio
     const existing = document.getElementById('createAgendaItemModal');
     if (existing) existing.remove();
 
-    // Load available users for assignment - limited to those assigned to the session
-    let staffOptions = '<option value="">Loading assigned staff...</option>';
+    // Load available users for assignment from database
+    let staffOptions = '<option value="">Loading staff...</option>';
 
     try {
-        const response = await fetch(`../api/api_sessions.php?id=${sessionId}`);
-        const data = await response.json();
-
-        if (data.success && data.session && data.session.assigned_staff) {
-            const users = data.session.assigned_staff;
-            if (users.length > 0) {
-                staffOptions = `<option value="">Select User</option>` + window.renderStaffOptions(users);
-            } else {
-                staffOptions = '<option value="">No staff assigned to this session</option>';
-            }
+        const users = await window.loadStaffList();
+        if (users && users.length > 0) {
+            staffOptions = `<option value="">Select User</option>` + window.renderStaffOptions(users);
         } else {
-            staffOptions = '<option value="">Failed to load assigned staff</option>';
+            staffOptions = '<option value="">No users available</option>';
         }
     } catch (e) {
         console.error('Error loading staff for agenda item:', e);
@@ -881,8 +874,8 @@ window.openCreateAgendaItemModal = async function (agendaId, agendaTitle, sessio
 
     const modalHtml = `
     <div id="createAgendaItemModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-        <div class="relative p-6 border dark:border-dark-border w-full max-w-2xl shadow-2xl rounded-2xl bg-white dark:bg-dark-card animate-fade-in-up m-4 max-h-[95vh] overflow-y-auto custom-scrollbar">
-            <div class="flex justify-between items-center mb-6">
+        <div class="relative border dark:border-dark-border w-full max-w-2xl shadow-2xl rounded-2xl bg-white dark:bg-dark-card animate-fade-in-up m-4 max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center p-6 pb-4 border-b border-gray-100 dark:border-dark-border bg-white dark:bg-dark-card rounded-t-2xl shrink-0">
                 <div>
                     <h3 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <i class="bi bi-file-earmark-plus text-red-600"></i>
@@ -897,7 +890,7 @@ window.openCreateAgendaItemModal = async function (agendaId, agendaTitle, sessio
                 </button>
             </div>
 
-            <form onsubmit="saveAgendaItem(event)" class="space-y-6">
+            <form onsubmit="saveAgendaItem(event)" class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
                 <input type="hidden" name="agenda_id" value="${agendaId}">
                 <input type="hidden" name="session_id" value="${sessionId}">
 
@@ -1122,19 +1115,15 @@ window.openEditAgendaItemModal = async function (agendaItemId, agendaId, session
             return;
         }
 
-        // Fetch session details to get assigned staff
+        // Fetch all staff to get assigned user
         let staffOptions = '<option value="">Select User</option>';
         try {
-            const sResponse = await fetch(`../api/api_sessions.php?id=${sessionId}`);
-            const sData = await sResponse.json();
-            if (sData.success && sData.session && sData.session.assigned_staff) {
-                const users = sData.session.assigned_staff;
-                staffOptions = `<option value="">Select User</option>` + users.map(u =>
-                    `<option value="${u.user_id}" ${u.user_id == item.assigned_to ? 'selected' : ''}>${u.user_name}</option>`
-                ).join('');
+            const users = await window.loadStaffList();
+            if (users && users.length > 0) {
+                staffOptions = `<option value="">Select User</option>` + window.renderStaffOptions(users, item.assigned_to);
             }
         } catch (e) {
-            console.error('Error loading session staff:', e);
+            console.error('Error loading staff:', e);
         }
 
         // Fetch Motions
@@ -1148,15 +1137,15 @@ window.openEditAgendaItemModal = async function (agendaItemId, agendaId, session
 
         const modalHtml = `
             <div id="editItemModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-                <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl p-6 w-full max-w-lg m-4 animate-fade-in-up max-h-[95vh] overflow-y-auto custom-scrollbar">
-                    <div class="flex justify-between items-center mb-6">
+                <div class="bg-white dark:bg-dark-card border dark:border-dark-border w-full max-w-lg shadow-2xl rounded-2xl animate-fade-in-up m-4 max-h-[90vh] flex flex-col overflow-hidden">
+                    <div class="flex justify-between items-center p-6 pb-4 border-b border-gray-100 dark:border-dark-border bg-white dark:bg-dark-card rounded-t-2xl shrink-0">
                         <h3 class="text-xl font-bold text-gray-900 dark:text-white">Edit Agenda Item</h3>
-                        <button onclick="document.getElementById('editItemModal').remove()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <button onclick="document.getElementById('editItemModal').remove()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-bg rounded-lg p-2 transition">
                             <i class="bi bi-x-lg text-xl"></i>
                         </button>
                     </div>
                     
-                    <form id="editItemForm" class="space-y-4">
+                    <form id="editItemForm" class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 dark:text-dark-text mb-2">Item Title *</label>
                             <input type="text" name="item_title" value="${item.item_title.replace(/"/g, '&quot;')}" required

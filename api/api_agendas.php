@@ -613,11 +613,66 @@ try {
                 $purpose = isset($input['item_purpose']) ? trim($input['item_purpose']) : null;
                 $recommendation = isset($input['item_recommendation']) ? trim($input['item_recommendation']) : null;
 
+                // Fetch current item details before update to compare assignment
+                $oldAssignedTo = null;
+                $oldTitle = '';
+                $checkStmt = $conn->prepare("SELECT assigned_to, item_title FROM agenda_items WHERE agenda_item_id = ?");
+                if ($checkStmt) {
+                    $checkStmt->bind_param("i", $itemId);
+                    $checkStmt->execute();
+                    $checkRow = $checkStmt->get_result()->fetch_assoc();
+                    if ($checkRow) {
+                        $oldAssignedTo = $checkRow['assigned_to'] ? intval($checkRow['assigned_to']) : null;
+                        $oldTitle = $checkRow['item_title'];
+                    }
+                    $checkStmt->close();
+                }
+
                 // FIX: Column name is agenda_item_id
                 $stmt = $conn->prepare("UPDATE agenda_items SET item_title = ?, item_purpose = ?, item_description = ?, item_recommendation = ?, deadline = ?, assigned_to = ? WHERE agenda_item_id = ?");
                 $stmt->bind_param("sssssii", $title, $purpose, $description, $recommendation, $deadline, $assignedTo, $itemId);
 
                 if ($stmt->execute()) {
+                    // Update corresponding deadline if it exists, or create one
+                    try {
+                        $deadlineSearch = "%(Linked to Agenda Item ID: " . $itemId . ")";
+                        $dCheckStmt = $conn->prepare("SELECT deadline_id FROM deadlines WHERE description LIKE ? LIMIT 1");
+                        $dCheckStmt->bind_param("s", $deadlineSearch);
+                        $dCheckStmt->execute();
+                        $dCheckRow = $dCheckStmt->get_result()->fetch_assoc();
+                        $dCheckStmt->close();
+
+                        if ($dCheckRow) {
+                            $dId = $dCheckRow['deadline_id'];
+                            $newDesc = $description . "\n\n(Linked to Agenda Item ID: " . $itemId . ")";
+                            $dUpdateStmt = $conn->prepare("UPDATE deadlines SET title = ?, description = ?, due_date = ?, assigned_to = ? WHERE deadline_id = ?");
+                            $dUpdateStmt->bind_param("sssii", $title, $newDesc, $deadline, $assignedTo, $dId);
+                            $dUpdateStmt->execute();
+                            $dUpdateStmt->close();
+                        } else if ($deadline) {
+                            $newDesc = $description . "\n\n(Linked to Agenda Item ID: " . $itemId . ")";
+                            $priority = 'Medium';
+                            $status = 'Pending';
+                            $dInsertStmt = $conn->prepare("INSERT INTO deadlines (title, description, due_date, assigned_to, priority, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+                            $dInsertStmt->bind_param("sssiss", $title, $newDesc, $deadline, $assignedTo, $priority, $status);
+                            $dInsertStmt->execute();
+                            $dInsertStmt->close();
+                        }
+                    } catch (Exception $ex) {}
+
+                    // Notify new assignee if assignment changed and is not null
+                    if ($assignedTo && $assignedTo !== $oldAssignedTo) {
+                        $notifType = 'Task Assigned';
+                        $notifMsg = "A task has been reassigned/assigned to you: '" . $title . "'. Due date: " . date('M d, Y', strtotime($deadline));
+                        $notifLink = 'deadlines';
+                        $nstmt = $conn->prepare("INSERT INTO notifications (user_id, type, message, link, created_at) VALUES (?, ?, ?, ?, NOW())");
+                        if ($nstmt) {
+                            $nstmt->bind_param("isss", $assignedTo, $notifType, $notifMsg, $notifLink);
+                            $nstmt->execute();
+                            $nstmt->close();
+                        }
+                    }
+
                     // Log Activity
                     try {
                         $sIdStmt = $conn->prepare("SELECT session_id FROM agenda_items WHERE agenda_item_id = ?");

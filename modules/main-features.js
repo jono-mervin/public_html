@@ -131,56 +131,33 @@ window.refreshAgendaStaffList = async function (sessionId) {
         return;
     }
 
-    // Use cache if available to avoid redundant fetches
-    if (window.agendaStaffCache && window.agendaStaffCache[sessionId]) {
-        const staff = window.agendaStaffCache[sessionId];
-        if (staffContainer) staffContainer.innerHTML = renderStaffCheckboxes(staff);
-
+    // Populate all Assign To dropdowns with all users from the database
+    try {
+        const staff = await window.loadStaffList();
+        const optionsHtml = '<option value="">Select User</option>' + window.renderStaffOptions(staff);
         const assignToSelects = document.querySelectorAll('.agenda-item-assigned-to');
         if (assignToSelects.length > 0 && typeof window.renderStaffOptions === 'function') {
-            const optionsHtml = '<option value="">Select User</option>' + window.renderStaffOptions(staff);
             assignToSelects.forEach(select => {
                 const currentValue = select.value;
-                if (!currentValue || currentValue === "") {
-                    select.innerHTML = optionsHtml;
-                }
+                select.innerHTML = optionsHtml;
+                if (currentValue) select.value = currentValue;
             });
         }
-        // Continue to check for date constraints even if staff is cached
-    } else {
-        // Show loading state ONLY if NOT cached
-        staffContainer.innerHTML = `
-            <div class="flex justify-center p-4">
-                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
-            </div>
-        `;
+    } catch (e) {
+        console.error('Error populating staff selects:', e);
     }
 
+    // Fetch session details for checkboxes and date constraints
     try {
         const response = await fetch(`../api/api_sessions.php?id=${sessionId}`);
         const data = await response.json();
 
-        if (data.success && data.session && data.session.assigned_staff) {
-            const staff = data.session.assigned_staff;
-
-            // Update cache
-            if (!window.agendaStaffCache) window.agendaStaffCache = {};
-            window.agendaStaffCache[sessionId] = staff;
-
-            // Populate checkboxes
-            if (staffContainer) staffContainer.innerHTML = renderStaffCheckboxes(staff);
-
-            // Also populate all Assign To dropdowns if they exist
-            const assignToSelects = document.querySelectorAll('.agenda-item-assigned-to');
-            if (assignToSelects.length > 0 && typeof window.renderStaffOptions === 'function') {
-                const optionsHtml = '<option value="">Select User</option>' + window.renderStaffOptions(staff);
-                assignToSelects.forEach(select => {
-                    const currentValue = select.value;
-                    // Only update if empty or if we just added this block
-                    if (!currentValue || currentValue === "" || select.innerHTML.includes('Select Session First')) {
-                        select.innerHTML = optionsHtml;
-                    }
-                });
+        if (data.success && data.session) {
+            if (data.session.assigned_staff) {
+                const sessionStaff = data.session.assigned_staff;
+                if (!window.agendaStaffCache) window.agendaStaffCache = {};
+                window.agendaStaffCache[sessionId] = sessionStaff;
+                if (staffContainer) staffContainer.innerHTML = renderStaffCheckboxes(sessionStaff);
             }
 
             // Set Date Constraints based on session date for all due date inputs
@@ -205,8 +182,6 @@ window.refreshAgendaStaffList = async function (sessionId) {
         } else {
             const msg = '<p class="text-xs text-center text-gray-500 italic p-4">No staff assigned to this session.</p>';
             if (staffContainer) staffContainer.innerHTML = msg;
-            const assignToSelect = document.getElementById('agenda-item-assigned-to');
-            if (assignToSelect) assignToSelect.innerHTML = '<option value="">No staff assigned</option>';
         }
     } catch (e) {
         console.error('Error refreshing agenda staff:', e);
@@ -16022,8 +15997,8 @@ window.openCreateAgendaModal = async function (defaultSessionId = null) {
 
     const modalHtml = `
         <div id="createAgendaModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div class="relative p-6 border w-full max-w-md shadow-2xl rounded-2xl bg-white animate-fade-in-up m-4 max-h-[95vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6">
+            <div class="relative border w-full max-w-md shadow-2xl rounded-2xl bg-white animate-fade-in-up m-4 max-h-[90vh] flex flex-col overflow-hidden">
+                <div class="flex justify-between items-center p-6 pb-4 border-b border-gray-100 shrink-0">
                     <div>
                         <h3 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <i class="bi bi-file-plus text-red-600"></i>
@@ -16035,7 +16010,7 @@ window.openCreateAgendaModal = async function (defaultSessionId = null) {
                         <i class="bi bi-x-lg text-xl"></i>
                     </button>
                 </div>
-                <form onsubmit="window.saveAgenda(event)" class="space-y-6">
+                <form onsubmit="window.saveAgenda(event)" class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
                     <!-- Section: Creating Agenda -->
                     <div class="space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
                         <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">1. Creating Agenda</h4>
@@ -16102,9 +16077,13 @@ window.openCreateAgendaModal = async function (defaultSessionId = null) {
     let itemIndex = 0;
 
     // Helper to add a new agenda item block
-    window.addAgendaItemForm = function () {
+    window.addAgendaItemForm = async function () {
         const container = document.getElementById('agenda-items-container');
         const sessionId = document.getElementById('agenda-session-id')?.value;
+
+        // Fetch all staff from DB
+        const staff = await window.loadStaffList();
+        const optionsHtml = '<option value="">Select User</option>' + window.renderStaffOptions(staff);
 
         const blockHtml = `
             <div class="agenda-item-block space-y-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm relative animate-fade-in-up">
@@ -16127,7 +16106,7 @@ window.openCreateAgendaModal = async function (defaultSessionId = null) {
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Assign To (Task) *</label>
                         <select name="items[${itemIndex}][assigned_to]" required class="agenda-item-assigned-to w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500">
-                            <option value="">${sessionId ? 'Loading Staff...' : 'Select Session First'}</option>
+                            ${optionsHtml}
                         </select>
                     </div>
                     <div>
@@ -16139,18 +16118,9 @@ window.openCreateAgendaModal = async function (defaultSessionId = null) {
         `;
 
         container.insertAdjacentHTML('beforeend', blockHtml);
-
-        // Immediate population if cached
-        if (sessionId && window.agendaStaffCache && window.agendaStaffCache[sessionId]) {
-            const staff = window.agendaStaffCache[sessionId];
-            const select = container.lastElementChild.querySelector('.agenda-item-assigned-to');
-            if (select && typeof window.renderStaffOptions === 'function') {
-                select.innerHTML = '<option value="">Select User</option>' + window.renderStaffOptions(staff);
-            }
-        }
         itemIndex++;
 
-        // Refresh staff list for the new row if session is selected
+        // Refresh staff list for date constraints if session is selected
         if (sessionId) {
             window.refreshAgendaStaffList(sessionId);
         }
