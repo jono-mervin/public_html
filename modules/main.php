@@ -117,7 +117,7 @@ if (file_exists($m_file)) {
 
             const normalizedRole = actualRole.trim().toLowerCase();
             
-            if (normalizedRole === 'administrator' || normalizedRole === 'admin') return 'Administrator';
+            if (normalizedRole === 'administrator' || normalizedRole === 'admin') return 'Admin';
             if (normalizedRole === 'staff') return 'Staff';
             if (normalizedRole === 'user') return 'User';
 

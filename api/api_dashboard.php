@@ -21,12 +21,12 @@ try {
     $userRole = $_SESSION['user_role'] ?? 'User - Committee';
     $userId = $_SESSION['user_id'] ?? 0;
     if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
-        $stmt = $conn->prepare("SELECT COUNT(*) as total FROM sessions s JOIN session_assignments sa ON s.session_id = sa.session_id WHERE s.status = 'Scheduled' AND sa.user_id = ?");
+        $stmt = $conn->prepare("SELECT COUNT(*) as total FROM sessions s JOIN session_assignments sa ON s.session_id = sa.session_id WHERE s.status != 'Inactive' AND sa.user_id = ?");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $res = $stmt->get_result();
     } else {
-        $sql = "SELECT COUNT(*) as total FROM sessions WHERE status = 'Scheduled'";
+        $sql = "SELECT COUNT(*) as total FROM sessions WHERE status != 'Inactive'";
         $res = $conn->query($sql);
     }
 
@@ -156,7 +156,80 @@ try {
     $response['upcoming_sessions'] = $upcoming;
 
     // 6. Chart Data
-    $response['session_frequency'] = [4, 6, 5, 8, 6, 9];
+    // 6.1 Session Distribution by Type
+    $session_dist = [];
+    $sql_dist = "SELECT session_type, COUNT(*) as count FROM sessions WHERE status != 'Inactive' GROUP BY session_type";
+    $res_dist = $conn->query($sql_dist);
+    if ($res_dist) {
+        while ($row = $res_dist->fetch_assoc()) {
+            $session_dist[$row['session_type']] = (int)$row['count'];
+        }
+    }
+    $response['session_distribution'] = $session_dist;
+
+    // 6.2 Agenda Status Distribution
+    $agenda_dist = [];
+    $sql_agenda = "SELECT status, COUNT(*) as count FROM agenda_items GROUP BY status";
+    $res_agenda = $conn->query($sql_agenda);
+    if ($res_agenda) {
+        while ($row = $res_agenda->fetch_assoc()) {
+            $status_label = $row['status'] ?: 'Pending';
+            $agenda_dist[$status_label] = (int)$row['count'];
+        }
+    }
+    $response['agenda_status_distribution'] = $agenda_dist;
+
+    // 6.3 Monthly Activity Trends (Last 6 Months)
+    $monthly_sessions = [];
+    $monthly_docs = [];
+    $months_list = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $m = date('M', strtotime("-$i months"));
+        $m_num = date('m', strtotime("-$i months"));
+        $months_list[$m_num] = $m;
+        $monthly_sessions[$m] = 0;
+        $monthly_docs[$m] = 0;
+    }
+
+    $sql_m_sess = "SELECT DATE_FORMAT(session_date, '%m') as m_num, COUNT(*) as count 
+                  FROM sessions 
+                  WHERE status != 'Inactive' AND session_date >= DATE_SUB(LAST_DAY(NOW()), INTERVAL 6 MONTH)
+                  GROUP BY DATE_FORMAT(session_date, '%m')";
+    $res_m_sess = $conn->query($sql_m_sess);
+    if ($res_m_sess) {
+        while ($row = $res_m_sess->fetch_assoc()) {
+            $m_num = $row['m_num'];
+            if (isset($months_list[$m_num])) {
+                $monthly_sessions[$months_list[$m_num]] = (int)$row['count'];
+            }
+        }
+    }
+
+    $sql_m_docs = "SELECT DATE_FORMAT(uploaded_at, '%m') as m_num, COUNT(*) as count 
+                  FROM (
+                      SELECT uploaded_at FROM session_documents
+                      UNION ALL
+                      SELECT uploaded_at FROM agenda_item_documents
+                      UNION ALL
+                      SELECT created_at as uploaded_at FROM ai_documents
+                  ) t 
+                  WHERE uploaded_at >= DATE_SUB(LAST_DAY(NOW()), INTERVAL 6 MONTH)
+                  GROUP BY DATE_FORMAT(uploaded_at, '%m')";
+    $res_m_docs = $conn->query($sql_m_docs);
+    if ($res_m_docs) {
+        while ($row = $res_m_docs->fetch_assoc()) {
+            $m_num = $row['m_num'];
+            if (isset($months_list[$m_num])) {
+                $monthly_docs[$months_list[$m_num]] = (int)$row['count'];
+            }
+        }
+    }
+
+    $response['monthly_activity'] = [
+        'labels' => array_keys($monthly_sessions),
+        'sessions' => array_values($monthly_sessions),
+        'documents' => array_values($monthly_docs)
+    ];
 
     echo json_encode(['success' => true, 'data' => $response]);
     $conn->close();

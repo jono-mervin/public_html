@@ -1095,10 +1095,31 @@ async function renderAdminDashboard(user) {
                         </div>
                     </div>
 
-                    <!-- Dashboard Graph -->
-                    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-slate-700">
-                        <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">System Overview</h3>
-                        <canvas id="dashboardChart" width="100%" height="40"></canvas>
+                    <!-- Dashboard Analytics Graphs Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Monthly Activity trends -->
+                        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-slate-700">
+                            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Monthly Activity Trends</h3>
+                            <div class="h-64 relative">
+                                <canvas id="monthlyActivityChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Session type distribution -->
+                        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-slate-700">
+                            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Session Distribution</h3>
+                            <div class="h-64 relative">
+                                <canvas id="sessionTypeChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Agenda status breakdown -->
+                        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-slate-700 md:col-span-2 lg:col-span-1">
+                            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Agenda Items by Status</h3>
+                            <div class="h-64 relative">
+                                <canvas id="agendaStatusChart"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Recent Activity / System Health Combined -->
@@ -1204,23 +1225,101 @@ async function loadAdminDashboardData() {
             `;
         }
 
-        // Initialize Graph
-        const ctx = document.getElementById('dashboardChart');
-        if (ctx) {
-            new Chart(ctx, {
+        // Initialize Monthly Activity Trends Chart
+        const ctxActivity = document.getElementById('monthlyActivityChart');
+        if (ctxActivity && data.monthly_activity) {
+            if (window.dashboardActivityChartInst) {
+                window.dashboardActivityChartInst.destroy();
+            }
+            window.dashboardActivityChartInst = new Chart(ctxActivity, {
                 type: 'bar',
                 data: {
-                    labels: ['Sessions', 'Agendas', 'Users'],
+                    labels: data.monthly_activity.labels || [],
+                    datasets: [
+                        {
+                            label: 'Sessions Held',
+                            data: data.monthly_activity.sessions || [],
+                            backgroundColor: '#dc2626',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Documents Uploaded',
+                            data: data.monthly_activity.documents || [],
+                            backgroundColor: '#1f2937',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        // Initialize Session Type Distribution Chart
+        const ctxSessionType = document.getElementById('sessionTypeChart');
+        if (ctxSessionType && data.session_distribution) {
+            const dist = data.session_distribution;
+            if (window.dashboardSessionTypeChartInst) {
+                window.dashboardSessionTypeChartInst.destroy();
+            }
+            window.dashboardSessionTypeChartInst = new Chart(ctxSessionType, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(dist),
                     datasets: [{
-                        label: 'System Metrics',
-                        data: [data.active_sessions || 0, data.total_agendas || 0, data.active_users || 0],
-                        backgroundColor: ['#ef4444', '#b91c1c', '#7f1d1d'],
-                        borderWidth: 1
+                        data: Object.values(dist),
+                        backgroundColor: ['#dc2626', '#3b82f6', '#f59e0b', '#10b981', '#6b7280'],
+                        borderWidth: 0
                     }]
                 },
                 options: {
                     responsive: true,
-                    scales: { y: { beginAtZero: true } }
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                padding: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Agenda Status Distribution Chart
+        const ctxAgendaStatus = document.getElementById('agendaStatusChart');
+        if (ctxAgendaStatus && data.agenda_status_distribution) {
+            const agendaDist = data.agenda_status_distribution;
+            if (window.dashboardAgendaStatusChartInst) {
+                window.dashboardAgendaStatusChartInst.destroy();
+            }
+            window.dashboardAgendaStatusChartInst = new Chart(ctxAgendaStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(agendaDist),
+                    datasets: [{
+                        data: Object.values(agendaDist),
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#6b7280'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                padding: 10
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -1352,15 +1451,18 @@ let simulationInterval = null;
 function simulateRealTimeUpdates() {
     if (simulationInterval) clearInterval(simulationInterval);
 
-    // Note: Real-time updates would now come from the database
-    // This function can be enhanced to poll the API or use WebSockets
     simulationInterval = setInterval(async () => {
         // 1. Check for due reminders/notifications globally
         await checkDueNotifications();
 
-        // 2. Refresh sessions if on relevant page
-        const contentArea = document.getElementById('content-area');
-        if (contentArea && (contentArea.innerHTML.includes('Session Scheduling') || contentArea.innerHTML.includes('Sessions'))) {
+        // 2. Refresh dashboard, reports, or sessions if on relevant page
+        if (window.activeSection === 'dashboard') {
+            await loadAdminDashboardData();
+        } else if (window.activeSection === 'analytics') {
+            if (typeof window.renderReportsAnalytics === 'function') {
+                await window.renderReportsAnalytics();
+            }
+        } else if (window.activeSection === 'sessions') {
             const user = getCurrentUser();
             if (user) {
                 await fetchSessions();
@@ -1370,7 +1472,7 @@ function simulateRealTimeUpdates() {
                 }
             }
         }
-    }, 60000); // Check every minute
+    }, 15000); // Check every 15 seconds for true real-time synchronization
 }
 
 /**
@@ -8253,6 +8355,11 @@ function submitExtensionRequest(id) {
 // ==============================
 
 function renderReportsAnalytics() {
+    // Delegate to overridden version in admin-modules.js if loaded
+    if (window.renderReportsAnalytics && window.renderReportsAnalytics !== renderReportsAnalytics) {
+        window.renderReportsAnalytics();
+        return;
+    }
     const user = getCurrentUser();
     const role = user ? user.role : 'Super Admin';
 

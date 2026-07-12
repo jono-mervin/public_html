@@ -5,10 +5,14 @@
 // REPORTS & ANALYTICS
 // ==============================
 
+// Chart instances to prevent duplication
+let docTypesChartInst = null;
+let agendaPrioritiesChartInst = null;
+let attendanceStatsChartInst = null;
+
 window.renderReportsAnalytics = async function () {
     const html = `
         <div class="space-y-6 animate-fade-in-up md:pb-10">
-            <!-- Header -->
             <!-- Premium Header - Red Palette -->
             <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-600 via-red-700 to-red-800 p-8 shadow-xl">
                 <div class="absolute inset-0 bg-black opacity-10"></div>
@@ -16,15 +20,14 @@ window.renderReportsAnalytics = async function () {
                 <div class="relative z-10">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div class="text-white">
-                            <h1 class="text-3xl font-bold mb-2">Reports & Analytics</h1>
-                            <p class="text-red-100 text-sm">System-wide data analysis and reporting</p>
+                            <h1 class="text-3xl font-bold mb-2 flex items-center gap-2">
+                                <i class="bi bi-cpu"></i> AI Document Analytics & Classification Hub
+                            </h1>
+                            <p class="text-red-100 text-sm">System-wide data analysis, document type parsing, attendance trends, and AI document processing</p>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="exportReports()" class="px-4 py-2 bg-white text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium flex items-center gap-2 shadow-lg transition-all">
-                                <i class="bi bi-download"></i> Export Data (CSV)
-                            </button>
-                            <button onclick="renderReportsAnalytics()" class="p-2 bg-red-700/50 text-white rounded-lg hover:bg-red-700 transition-all border border-red-500/30">
-                                <i class="bi bi-arrow-clockwise"></i>
+                            <button onclick="renderReportsAnalytics()" class="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all border border-white/30 text-sm font-medium flex items-center gap-2 shadow-lg">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh Hub
                             </button>
                         </div>
                     </div>
@@ -33,151 +36,238 @@ window.renderReportsAnalytics = async function () {
 
             <!-- Stats Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="reports-stats-grid">
-                <!-- Loading placeholders -->
-                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-red-600 animate-pulse border border-gray-100 dark:border-dark-border">
-                    <div class="h-4 bg-gray-100 dark:bg-slate-700 rounded w-1/2 mb-2"></div>
-                    <div class="h-8 bg-gray-100 dark:bg-slate-700 rounded w-3/4"></div>
+                <!-- Stat 1: Total Analyzed -->
+                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-red-600 border border-gray-100 dark:border-dark-border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Total Files Analyzed</p>
+                            <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1" id="stat-total-analyzed">...</h3>
+                        </div>
+                        <div class="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
+                            <i class="bi bi-database-check text-xl"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 dark:text-dark-muted mt-4">Scanned from files & database</p>
                 </div>
-                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-blue-600 animate-pulse border border-gray-100 dark:border-dark-border">
-                     <div class="h-4 bg-gray-100 dark:bg-slate-700 rounded w-1/2 mb-2"></div>
-                    <div class="h-8 bg-gray-100 dark:bg-slate-700 rounded w-3/4"></div>
+
+                <!-- Stat 2: Verified -->
+                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-green-600 border border-gray-100 dark:border-dark-border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">AI Verified Files</p>
+                            <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1" id="stat-verified-files">...</h3>
+                        </div>
+                        <div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600 dark:text-green-400">
+                            <i class="bi bi-patch-check text-xl"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-green-600 dark:text-green-400 mt-4 font-medium" id="stat-verification-pct">...% verified</p>
                 </div>
-                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-yellow-500 animate-pulse border border-gray-100 dark:border-dark-border">
-                     <div class="h-4 bg-gray-100 dark:bg-slate-700 rounded w-1/2 mb-2"></div>
-                    <div class="h-8 bg-gray-100 dark:bg-slate-700 rounded w-3/4"></div>
+
+                <!-- Stat 3: Avg Confidence -->
+                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-blue-500 border border-gray-100 dark:border-dark-border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Avg AI Confidence</p>
+                            <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1" id="stat-avg-confidence">...</h3>
+                        </div>
+                        <div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
+                            <i class="bi bi-shield-check text-xl"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 dark:text-dark-muted mt-4">Precision accuracy rating</p>
                 </div>
-                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-green-600 animate-pulse border border-gray-100 dark:border-dark-border">
-                     <div class="h-4 bg-gray-100 dark:bg-slate-700 rounded w-1/2 mb-2"></div>
-                    <div class="h-8 bg-gray-100 dark:bg-slate-700 rounded w-3/4"></div>
+
+                <!-- Stat 4: Pending Review -->
+                <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-yellow-500 border border-gray-100 dark:border-dark-border">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Pending Review</p>
+                            <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1" id="stat-pending-review">...</h3>
+                        </div>
+                        <div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-yellow-600 dark:text-yellow-400">
+                            <i class="bi bi-exclamation-triangle text-xl"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-yellow-600 mt-4 font-semibold">Requires human verification</p>
                 </div>
             </div>
 
-            <!-- Charts Row (Mock structure but updated labels) -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Bar Chart Simulator -->
+            <!-- Dynamic Topic Cloud Panel -->
+            <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
+                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
+                     <i class="bi bi-tags"></i> AI Keyword Extraction & Topic Modelling
+                 </h3>
+                 <p class="text-xs text-gray-500 dark:text-dark-muted mb-4">Most frequent topics discussed during Sangguniang Panlungsod sessions and agenda items</p>
+                 <div id="ai-topic-cloud" class="flex flex-wrap gap-2">
+                     <!-- Populated by JS -->
+                     <span class="text-xs text-gray-400 italic">Extracting topics...</span>
+                 </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Document formats doughnut -->
                 <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
-                     <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Session Frequency (Active Stats)</h3>
-                     <div class="relative h-64 w-full">
-                        <canvas id="sessionFrequencyChart"></canvas>
+                     <h3 class="text-base font-bold text-gray-800 dark:text-white mb-4">Document Format Breakdown</h3>
+                     <div class="relative h-56 w-full flex justify-center">
+                        <canvas id="docTypesChart"></canvas>
                      </div>
                 </div>
 
-                <!-- Donut Chart Simulator -->
+                <!-- Agenda priorities bar -->
                 <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
-                     <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">System Distribution</h3>
-                     <div class="relative h-64 w-full flex justify-center">
-                        <canvas id="distributionChart"></canvas>
+                     <h3 class="text-base font-bold text-gray-800 dark:text-white mb-4">Agenda Workload by Priority</h3>
+                     <div class="relative h-56 w-full">
+                        <canvas id="agendaPrioritiesChart"></canvas>
+                     </div>
+                </div>
+
+                <!-- Attendance trends doughnut -->
+                <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
+                     <h3 class="text-base font-bold text-gray-800 dark:text-white mb-4">Council Attendance Rates</h3>
+                     <div class="relative h-56 w-full flex justify-center">
+                        <canvas id="attendanceStatsChart"></canvas>
                      </div>
                 </div>
             </div>
             
-            <!-- Recent Activity List -->
-             <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
-                <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Recent System Activities</h3>
+            <!-- AI Classification Table -->
+            <div class="bg-white dark:bg-dark-card rounded-xl shadow-md p-6 border border-gray-100 dark:border-dark-border transition-colors duration-300">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b pb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <i class="bi bi-shield-check"></i> AI Document Classification & Verification Grid
+                        </h3>
+                        <p class="text-xs text-gray-500 dark:text-dark-muted mt-1">Review, correct, and verify automated document classification tags and meeting summaries</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="verification-filter" onchange="filterAnalyticsTable()" class="px-3 py-1.5 border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-bg rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 dark:text-white transition-colors">
+                            <option value="all">All Documents</option>
+                            <option value="pending">Pending Verification</option>
+                            <option value="verified">Verified Only</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left">
+                    <table class="w-full text-left border-collapse">
                         <thead class="bg-gray-50 dark:bg-dark-bg text-gray-600 dark:text-dark-muted text-xs uppercase">
                             <tr>
-                                <th class="p-3">Activity</th>
-                                <th class="p-3">User</th>
-                                <th class="p-3">Date</th>
-                                <th class="p-3 text-right">Status</th>
+                                <th class="p-3">File Information</th>
+                                <th class="p-3">AI Classification</th>
+                                <th class="p-3">Confidence</th>
+                                <th class="p-3">Executive Summary</th>
+                                <th class="p-3">Verification Status</th>
+                                <th class="p-3 text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="recent-activities-body" class="divide-y divide-gray-100 dark:divide-dark-border text-sm">
+                        <tbody id="ai-documents-body" class="divide-y divide-gray-100 dark:divide-dark-border text-sm">
                             <tr>
-                                <td colspan="4" class="p-6 text-center text-gray-400 dark:text-dark-muted">Loading activities...</td>
+                                <td colspan="6" class="p-6 text-center text-gray-400 dark:text-dark-muted">Loading documents archive...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-             </div>
+            </div>
+        </div>
+
+        <!-- Details / Summary Modal -->
+        <div id="summary-details-modal" class="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden animate-fade-in">
+            <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-100 dark:border-dark-border max-w-2xl w-full max-h-[85vh] flex flex-col animate-fade-in-up">
+                <!-- Header -->
+                <div class="p-6 border-b border-gray-100 dark:border-dark-border flex justify-between items-center bg-gradient-to-r from-red-600 to-red-700 text-white rounded-t-2xl">
+                    <h3 class="text-xl font-bold flex items-center gap-2" id="summary-modal-title">
+                        <i class="bi bi-file-earmark-text"></i> Document Summary
+                    </h3>
+                    <button onclick="closeSummaryModal()" class="text-white hover:text-red-200 transition-colors">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+                <!-- Content -->
+                <div class="p-6 overflow-y-auto space-y-4 text-gray-700 dark:text-gray-300">
+                    <div>
+                        <h4 class="text-xs uppercase font-bold tracking-widest text-red-600 dark:text-red-400 mb-1">Document Summary</h4>
+                        <p class="text-sm leading-relaxed" id="summary-modal-content"></p>
+                    </div>
+                </div>
+                <!-- Footer -->
+                <div class="p-4 border-t border-gray-100 dark:border-dark-border flex justify-end">
+                    <button onclick="closeSummaryModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-dark-bg dark:hover:bg-slate-700 text-gray-700 dark:text-white text-sm font-medium rounded-lg transition">Close</button>
+                </div>
+            </div>
         </div>
     `;
     document.getElementById('content-area').innerHTML = html;
     await loadReportsDataEnhanced();
 };
 
-async function loadReportsDataEnhanced() {
+window.loadReportsDataEnhanced = async function () {
     try {
-        const response = await fetch('../api/api_reports.php');
+        const response = await fetch('../api/api_analytics.php');
         const result = await response.json();
 
         if (result.success) {
             const data = result.data;
 
-            // Update Stats Grid
-            const statsGrid = document.getElementById('reports-stats-grid');
-            if (statsGrid) {
-                statsGrid.innerHTML = `
-                    <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-red-600 transform transition hover:-translate-y-1 border border-gray-100 dark:border-dark-border">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Total Users</p>
-                                <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1">${data.total_users || 0}</h3>
-                            </div>
-                            <div class="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
-                                <i class="bi bi-people text-xl"></i>
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-400 dark:text-dark-muted mt-4">Synced from database</p>
-                    </div>
+            // 1. Populate stats cards
+            document.getElementById('stat-total-analyzed').textContent = data.total_analyzed || 0;
+            document.getElementById('stat-verified-files').textContent = data.verified_count || 0;
+            document.getElementById('stat-pending-review').textContent = data.pending_count || 0;
+            document.getElementById('stat-avg-confidence').textContent = (data.avg_confidence || 0) + '%';
+            
+            const verifyPct = data.total_analyzed > 0 ? Math.round((data.verified_count / data.total_analyzed) * 100) : 0;
+            document.getElementById('stat-verification-pct').textContent = verifyPct + '% verified';
 
-                    <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-blue-600 transform transition hover:-translate-y-1 border border-gray-100 dark:border-dark-border">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Total Sessions</p>
-                                <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1">${data.total_sessions || 0}</h3>
-                            </div>
-                            <div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                                <i class="bi bi-calendar-event text-xl"></i>
-                            </div>
-                        </div>
-                        <p class="text-xs text-green-600 dark:text-green-400 mt-4 flex items-center">
-                            <span class="font-medium">${data.completion_rate || 0}%</span>
-                            <span class="text-gray-400 dark:text-dark-muted ml-1">completion rate</span>
-                        </p>
-                    </div>
-
-                    <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-yellow-500 transform transition hover:-translate-y-1 border border-gray-100 dark:border-dark-border">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Pending Items</p>
-                                <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1">${data.pending_items || 0}</h3>
-                            </div>
-                            <div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-yellow-600 dark:text-yellow-400">
-                                <i class="bi bi-hourglass-split text-xl"></i>
-                            </div>
-                        </div>
-                         <p class="text-xs text-gray-400 dark:text-dark-muted mt-4">Action required</p>
-                    </div>
-
-                    <div class="bg-white dark:bg-dark-card p-6 rounded-xl shadow-md border-l-4 border-green-600 transform transition hover:-translate-y-1 border border-gray-100 dark:border-dark-border">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase">Docs Processed</p>
-                                <h3 class="text-2xl font-bold text-gray-800 dark:text-white mt-1">${data.docs_processed || 0}</h3>
-                            </div>
-                            <div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600 dark:text-green-400">
-                                <i class="bi bi-file-earmark-text text-xl"></i>
-                            </div>
-                        </div>
-                         <p class="text-xs text-green-600 dark:text-green-400 mt-4">Live record count</p>
-                    </div>
-                `;
+            // 2. Populate tag cloud
+            const cloudContainer = document.getElementById('ai-topic-cloud');
+            if (cloudContainer && data.topic_tags) {
+                cloudContainer.innerHTML = data.topic_tags.map(tag => `
+                    <span class="px-3 py-1.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200/50 dark:border-red-900/30 rounded-full text-xs font-semibold cursor-pointer hover:bg-red-600 hover:text-white transition duration-300">
+                        # ${tag.toUpperCase()}
+                    </span>
+                `).join('');
             }
 
-            // Charts implementation using Chart.js
+            // 3. Render charts
             if (typeof Chart !== 'undefined') {
-                const ctxFreq = document.getElementById('sessionFrequencyChart');
-                if (ctxFreq) {
-                    new Chart(ctxFreq, {
+                // Destroy old instances
+                if (docTypesChartInst) docTypesChartInst.destroy();
+                if (agendaPrioritiesChartInst) agendaPrioritiesChartInst.destroy();
+                if (attendanceStatsChartInst) attendanceStatsChartInst.destroy();
+
+                // Document Types
+                const ctxDocs = document.getElementById('docTypesChart');
+                if (ctxDocs && data.document_types) {
+                    const extData = data.document_types;
+                    docTypesChartInst = new Chart(ctxDocs, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(extData),
+                            datasets: [{
+                                data: Object.values(extData),
+                                backgroundColor: ['#dc2626', '#3b82f6', '#f59e0b', '#10b981', '#6b7280', '#8b5cf6']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, padding: 8 } } }
+                        }
+                    });
+                }
+
+                // Agenda Priorities
+                const ctxPriorities = document.getElementById('agendaPrioritiesChart');
+                if (ctxPriorities && data.agenda_priorities) {
+                    const priorityData = data.agenda_priorities;
+                    agendaPrioritiesChartInst = new Chart(ctxPriorities, {
                         type: 'bar',
                         data: {
-                            labels: data.monthly_activity.labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                            labels: Object.keys(priorityData),
                             datasets: [{
-                                label: 'Sessions',
-                                data: data.monthly_activity.data || [0, 0, 0, 0, 0, 0],
+                                label: 'Items Count',
+                                data: Object.values(priorityData),
                                 backgroundColor: '#dc2626',
                                 borderRadius: 4
                             }]
@@ -191,51 +281,157 @@ async function loadReportsDataEnhanced() {
                     });
                 }
 
-                const ctxDist = document.getElementById('distributionChart');
-                if (ctxDist) {
-                    const statusData = data.distribution || {};
-                    new Chart(ctxDist, {
+                // Attendance rates
+                const ctxAttendance = document.getElementById('attendanceStatsChart');
+                if (ctxAttendance && data.attendance_stats) {
+                    const attData = data.attendance_stats;
+                    attendanceStatsChartInst = new Chart(ctxAttendance, {
                         type: 'doughnut',
                         data: {
-                            labels: Object.keys(statusData),
+                            labels: Object.keys(attData),
                             datasets: [{
-                                data: Object.values(statusData),
-                                backgroundColor: ['#dc2626', '#3b82f6', '#f59e0b', '#10b981', '#6b7280']
+                                data: Object.values(attData),
+                                backgroundColor: ['#10b981', '#ef4444', '#f59e0b', '#6b7280']
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: { legend: { position: 'bottom' } }
+                            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, padding: 8 } } }
                         }
                     });
                 }
             }
 
-            // Recent Activities
-            const activitiesBody = document.getElementById('recent-activities-body');
-            if (activitiesBody) {
-                const logsRes = await fetch('../api/api_logs.php?limit=5');
-                const logsData = await logsRes.json();
-                if (logsData.success && logsData.data) {
-                    activitiesBody.innerHTML = logsData.data.map(log => `
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="p-3">
-                                <p class="font-medium text-gray-800">${log.action}</p>
-                                <p class="text-xs text-gray-500 truncate max-w-xs">${log.description}</p>
-                            </td>
-                            <td class="p-3 font-medium text-gray-600">${log.user_name || 'System'}</td>
-                            <td class="p-3 text-gray-500">${new Date(log.created_at).toLocaleDateString()}</td>
-                            <td class="p-3 text-right"><span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase">SUCCESS</span></td>
-                        </tr>
-                    `).join('');
-                }
-            }
+            // 4. Render Table of Documents
+            window.allAnalyticsDocs = data.ai_documents || [];
+            filterAnalyticsTable();
         }
     } catch (e) {
-        console.error('Error loading reports data:', e);
+        console.error('Error loading analytics details:', e);
     }
-}
+};
+
+window.filterAnalyticsTable = function () {
+    const filterVal = document.getElementById('verification-filter').value;
+    const body = document.getElementById('ai-documents-body');
+    if (!body || !window.allAnalyticsDocs) return;
+
+    let filtered = window.allAnalyticsDocs;
+    if (filterVal === 'pending') {
+        filtered = window.allAnalyticsDocs.filter(d => d.is_verified === 0);
+    } else if (filterVal === 'verified') {
+        filtered = window.allAnalyticsDocs.filter(d => d.is_verified === 1);
+    }
+
+    if (filtered.length === 0) {
+        body.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-gray-400 dark:text-dark-muted italic">No matching records found</td></tr>`;
+        return;
+    }
+
+    body.innerHTML = filtered.map(doc => {
+        const displayClass = doc.manual_classification || doc.classification || 'Unclassified';
+        const verifyBadge = doc.is_verified 
+            ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full border border-green-200/50"><i class="bi bi-check-circle-fill"></i> Verified</span>`
+            : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400 text-xs font-semibold rounded-full border border-yellow-200/50"><i class="bi bi-exclamation-circle-fill"></i> Pending Review</span>`;
+        
+        // Define dropdown options
+        const categories = ['Ordinance', 'Resolution', 'Committee Report', 'Minutes', 'Memorandum', 'Letter'];
+        const selectOptions = categories.map(cat => `
+            <option value="${cat}" ${displayClass === cat ? 'selected' : ''}>${cat}</option>
+        `).join('');
+
+        const scoreText = doc.confidence_score !== null ? `${doc.confidence_score}%` : 'N/A';
+        const scoreColor = doc.confidence_score >= 85 ? 'text-green-600' : (doc.confidence_score >= 70 ? 'text-yellow-600' : 'text-red-500');
+
+        return `
+            <tr class="hover:bg-gray-50/50 dark:hover:bg-slate-800/50 transition">
+                <td class="p-3">
+                    <p class="font-bold text-gray-800 dark:text-white">${doc.filename}</p>
+                    <p class="text-xs text-gray-400 dark:text-dark-muted mt-0.5">Uploaded: ${new Date(doc.created_at).toLocaleDateString()}</p>
+                </td>
+                <td class="p-3">
+                    <div class="flex items-center gap-2">
+                        <select onchange="updateDocumentClassification(${doc.id}, this.value)" class="px-2 py-1 border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-bg rounded text-xs focus:outline-none focus:ring-1 focus:ring-red-500 dark:text-white">
+                            ${selectOptions}
+                        </select>
+                    </div>
+                </td>
+                <td class="p-3 font-mono font-bold ${scoreColor}">${scoreText}</td>
+                <td class="p-3">
+                    <p class="text-xs text-gray-600 dark:text-gray-400 max-w-xs truncate">${doc.summary || 'No summary available'}</p>
+                </td>
+                <td class="p-3">${verifyBadge}</td>
+                <td class="p-3 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                        <button onclick="openSummaryModal('${doc.filename}', '${encodeURIComponent(doc.summary || '')}')" class="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition" title="Read AI Summary">
+                            <i class="bi bi-file-text text-base"></i>
+                        </button>
+                        ${!doc.is_verified ? `
+                            <button onclick="verifyDocumentClassification(${doc.id})" class="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition" title="Approve Classification">
+                                <i class="bi bi-check-lg"></i> Verify
+                            </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+};
+
+window.verifyDocumentClassification = async function (docId) {
+    try {
+        const response = await fetch('../api/api_analytics.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify', document_id: docId })
+        });
+        const res = await response.json();
+        if (res.success) {
+            showNotification('Classification verified successfully', 'success');
+            await loadReportsDataEnhanced();
+        } else {
+            showNotification(res.message || 'Verification failed', 'error');
+        }
+    } catch (e) {
+        console.error('Error verifying classification:', e);
+    }
+};
+
+window.updateDocumentClassification = async function (docId, newClass) {
+    try {
+        const response = await fetch('../api/api_analytics.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'reclassify', document_id: docId, classification: newClass })
+        });
+        const res = await response.json();
+        if (res.success) {
+            showNotification('Classification updated successfully', 'success');
+            await loadReportsDataEnhanced();
+        } else {
+            showNotification(res.message || 'Re-classification failed', 'error');
+        }
+    } catch (e) {
+        console.error('Error updating classification:', e);
+    }
+};
+
+window.openSummaryModal = function (filename, summaryEncoded) {
+    const summary = decodeURIComponent(summaryEncoded);
+    document.getElementById('summary-modal-title').innerHTML = `<i class="bi bi-file-earmark-text-fill mr-1"></i> ${filename}`;
+    document.getElementById('summary-modal-content').textContent = summary || 'No summary available for this document.';
+    
+    const modal = document.getElementById('summary-details-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.closeSummaryModal = function () {
+    const modal = document.getElementById('summary-details-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+};
 
 // ==============================
 // USER MANAGEMENT
