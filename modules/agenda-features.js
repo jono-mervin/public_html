@@ -11,7 +11,7 @@ window.renderAgendasEnhanced = async function () {
         window.isSubView = false;
         const user = getCurrentUser();
         const role = user ? (user.role || user.user_role || 'User') : 'User';
-        const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+        const isStaffOrAdmin = isStaffOrAdminRole(user);
 
         const response = await fetch('../api/api_agendas.php');
         const data = await response.json();
@@ -180,7 +180,7 @@ window.viewAgendaSpecificDetails = async function (agendaId, sessionId, viewOnly
     window.activeSection = viewOnly ? 'sessions' : 'agendas';
     const user = getCurrentUser();
     const role = user ? (user.role || user.user_role || 'User') : 'User';
-    const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+    const isStaffOrAdmin = isStaffOrAdminRole(user);
     try {
         // Find session in cache
         const session = window.cachedSessions?.find(s => (s.session_id || s.id) == sessionId);
@@ -369,7 +369,7 @@ window.viewSessionAgenda = async function (sessionId) {
     window.activeSection = 'agendas';
     const user = getCurrentUser();
     const role = user ? (user.role || user.user_role || 'User') : 'User';
-    const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+    const isStaffOrAdmin = isStaffOrAdminRole(user);
     try {
         // Find session in cached data
         const session = window.cachedAgendasSessions?.find(s => s.session_id == sessionId) ||
@@ -540,6 +540,11 @@ window.viewSessionAgenda = async function (sessionId) {
                         </div>
                         <h4 class="font-bold text-gray-800 dark:text-white mb-2">No Agenda Linked</h4>
                         <p class="text-gray-500 dark:text-dark-muted text-sm max-w-xs mx-auto mb-6">This session doesn't have any agenda items yet.</p>
+                        ${isStaffOrAdmin && !isSessionLockedForEditing ? `
+                        <button onclick="openCreateAgendaModal(${sessionId})" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition inline-flex items-center gap-2 shadow-lg shadow-red-500/20">
+                            <i class="bi bi-plus-lg"></i> Add Agenda
+                        </button>
+                        ` : ''}
                     </div>
                     `}
                 </div>
@@ -559,7 +564,7 @@ window.viewSessionAgenda = async function (sessionId) {
 function renderAgendaSessionListHtml(sessionsWithAgendas) {
     const user = getCurrentUser();
     const role = user ? (user.role || user.user_role || 'User') : 'User';
-    const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+    const isStaffOrAdmin = isStaffOrAdminRole(user);
     if (!sessionsWithAgendas || sessionsWithAgendas.length === 0) {
         return `
             <div class="p-12 text-center">
@@ -1566,8 +1571,8 @@ window.viewAgendaItemDetailsFull = async function (itemId, agendaId, sessionId) 
 
         const user = getCurrentUser();
         const role = user ? (user.role || user.user_role || 'User').toLowerCase() : 'user';
-        const isAdmin = (role === 'super admin' || role === 'admin');
-        const isStaffOrAdmin = isAdmin || role === 'staff';
+        const isAdmin = isAdminRole(user);
+        const isStaffOrAdmin = isStaffOrAdminRole(user);
 
         // Determine if the parent session is locked (missed / completed / cancelled / postponed / inactive)
         const execStatus = session ? (session.status || '').toLowerCase() : '';
@@ -2055,7 +2060,7 @@ window.toggleInlineEdit = async function (field, itemId, agendaId, sessionId) {
         const motions = await window.getMotions();
         const user = getCurrentUser();
         const role = user ? (user.role || user.user_role || 'User') : 'User';
-        const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+        const isStaffOrAdmin = isStaffOrAdminRole(user);
 
         editHtml = `
             <div class="flex gap-2 w-full">

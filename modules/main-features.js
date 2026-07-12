@@ -15,6 +15,26 @@ function getCurrentUser() {
     return null;
 }
 
+function normalizeUserRole(userOrRole) {
+    const role = typeof userOrRole === 'string'
+        ? userOrRole
+        : (userOrRole?.role || userOrRole?.user_role || 'User');
+    return String(role).toLowerCase().trim();
+}
+
+function isAdminRole(userOrRole) {
+    const role = normalizeUserRole(userOrRole);
+    return role === 'super admin' || role === 'admin' || role === 'administrator';
+}
+
+function isStaffOrAdminRole(userOrRole) {
+    const role = normalizeUserRole(userOrRole);
+    return isAdminRole(role) || role === 'staff';
+}
+
+window.isAdminRole = isAdminRole;
+window.isStaffOrAdminRole = isStaffOrAdminRole;
+
 // Helper to save current user to local or session storage
 function saveCurrentUser(user) {
     if (localStorage.getItem('currentUser')) {

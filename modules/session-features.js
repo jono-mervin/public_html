@@ -8,7 +8,7 @@
 window.renderSessionsEnhanced = async function () {
     const user = getCurrentUser();
     const role = user ? (user.role || user.user_role || 'User') : 'User';
-    const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+    const isStaffOrAdmin = isStaffOrAdminRole(user);
     window.isSubView = false;
 
     // Guard: Only render if sessions is the active section
@@ -121,7 +121,7 @@ window.renderSessionsEnhanced = async function () {
                         <!-- Default Header View -->
                         <div id="defaultHeader" class="flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-300 transform scale-100 opacity-100">
                             <div class="flex items-center gap-4 w-full md:w-auto">
-                                ${(role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') ? `
+                                ${isAdminRole(role) ? `
                                     <div class="flex items-center">
                                         <input type="checkbox" id="selectAllSessions" onchange="window.toggleSelectAll(this)" class="w-5 h-5 rounded border-gray-300 dark:border-slate-600 text-red-600 focus:ring-red-500 transition-all cursor-pointer">
                                     </div>
@@ -140,7 +140,7 @@ window.renderSessionsEnhanced = async function () {
                                     <option value="Cancelled">Cancelled</option>
                                     <option value="Inactive">Inactive</option>
                                 </select>
-                                ${(role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') ? `
+                                ${isAdminRole(role) ? `
                                 <select id="sessionVisibilityFilter" onchange="filterSessions()" class="px-4 py-2 border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-xl text-xs font-bold focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-colors">
                                     <option value="all">Everywhere</option>
                                     <option value="Active">Active Only</option>
@@ -164,7 +164,7 @@ window.renderSessionsEnhanced = async function () {
                             </div>
                         </div>
 
-                         ${(role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') ? `
+                         ${isAdminRole(role) ? `
                         <div id="bulkHeader" class="hidden absolute inset-0 flex items-center justify-between gap-4 transition-all duration-300 transform scale-95 opacity-0">
                             <div class="flex items-center gap-4">
                                 <div class="flex items-center">
@@ -212,7 +212,7 @@ window.viewSessionDetails = async function (sessionId) {
         window.activeSection = 'sessions';
         const user = getCurrentUser();
         const role = user ? (user.role || user.user_role || 'User') : 'User';
-        const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+        const isStaffOrAdmin = isStaffOrAdminRole(user);
 
         // Convert sessionId to number for comparison
         const targetSessionId = parseInt(sessionId);
@@ -458,7 +458,7 @@ window.viewSessionDetails = async function (sessionId) {
                                 ${isStaffOrAdmin && (session.session_status || 'Active') !== 'Inactive' && !isLockedForEditing ? `
                                 <div class="flex items-center gap-2">
                                     <button onclick="recordSessionAttendance(${sessionId})" class="text-sm text-red-600 dark:text-red-400 font-medium hover:underline">Update</button>
-                                    ${((role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || session.created_by == (user.id || user.user_id)) ? `
+                                    ${(isAdminRole(role) || session.created_by == (user.id || user.user_id)) ? `
                                     <button onclick="deleteSessionAttendance(${sessionId})" class="text-sm text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 font-medium transition ml-3" title="Clear Attendance">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -526,7 +526,7 @@ window.viewSessionDetails = async function (sessionId) {
                                 ${isStaffOrAdmin && (session.session_status || 'Active') !== 'Inactive' && !isLockedForEditing ? `
                                 <div class="flex items-center gap-2">
                                     <button onclick="addMeetingMinutes(${sessionId})" class="text-sm text-red-600 dark:text-red-400 font-medium hover:underline">Edit</button>
-                                    ${((role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || session.created_by == (user.id || user.user_id)) ? `
+                                    ${(isAdminRole(role) || session.created_by == (user.id || user.user_id)) ? `
                                     <button onclick="deleteSessionMinutes(${sessionId})" class="text-sm text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 font-medium transition ml-3" title="Delete Minutes">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -686,7 +686,7 @@ window.viewSessionDetails = async function (sessionId) {
                                     <span>Cancel Session</span>
                                     <i class="bi bi-x-circle group-hover:scale-110 transition-transform"></i>
                                 </button>
-                                ${((role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || session.created_by == (user.id || user.user_id)) ? `
+                                ${(isAdminRole(role) || session.created_by == (user.id || user.user_id)) ? `
                                 <button onclick="window.deleteSession(${sessionId})" class="w-full flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/10 hover:bg-red-600 text-red-600 hover:text-white font-bold transition-all text-left group border-t border-gray-50 dark:border-dark-border pt-4">
                                     <span>Delete Session</span>
                                     <i class="bi bi-trash3 group-hover:scale-110 transition-transform"></i>
@@ -893,7 +893,7 @@ async function loadSessionHistory(sessionId) {
 function renderSessionListHtml(sessions) {
     const user = getCurrentUser();
     const role = user ? (user.role || user.user_role || 'User') : 'User';
-    const isStaffOrAdmin = (role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || role.toLowerCase() === 'staff';
+    const isStaffOrAdmin = isStaffOrAdminRole(user);
 
     if (!sessions || sessions.length === 0) {
         return `
@@ -939,7 +939,7 @@ function renderSessionListHtml(sessions) {
                         <div class="flex items-start justify-between gap-6">
                             <div class="flex-1">
                                 <div class="flex items-start gap-5">
-                                    ${(role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') ? `
+                                    ${isAdminRole(role) ? `
                                         <div class="flex items-center pt-5" onclick="event.stopPropagation()">
                                             <input type="checkbox" name="sessionSelect" value="${s.session_id}" onchange="window.updateSelectionState()" class="session-checkbox w-5 h-5 rounded border-gray-300 dark:border-slate-600 text-red-600 focus:ring-red-500 transition-all cursor-pointer">
                                         </div>
@@ -996,7 +996,7 @@ function renderSessionListHtml(sessions) {
                             <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onclick="event.stopPropagation()">
                                 ${isStaffOrAdmin ? `
                                     ${s.session_status === 'Inactive' ? `
-                                        ${(role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') ? `
+                                        ${isAdminRole(role) ? `
                                         <button onclick="window.restoreSession(${s.session_id})" class="p-2 text-gray-400 dark:text-gray-500 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400 rounded-lg transition" title="Restore Session">
                                             <i class="bi bi-arrow-counterclockwise font-bold"></i>
                                         </button>
@@ -1012,7 +1012,7 @@ function renderSessionListHtml(sessions) {
                                         </button>
                                     ` : ''}
                                 ` : ''}
-                                ${((role.toLowerCase() === 'super admin' || role.toLowerCase() === 'admin') || s.created_by == (user.id || user.user_id)) ? `
+                                ${(isAdminRole(role) || s.created_by == (user.id || user.user_id)) ? `
                                     <button onclick="event.stopPropagation(); deleteSession(${s.session_id})" class="p-2 text-gray-400 dark:text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition" title="${s.session_status === 'Inactive' ? 'Delete Permanently' : 'Delete'}">
                                         <i class="bi bi-trash"></i>
                                     </button>
