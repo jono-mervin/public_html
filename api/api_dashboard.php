@@ -20,7 +20,7 @@ try {
     $response = [];
     $userRole = $_SESSION['user_role'] ?? 'User - Committee';
     $userId = $_SESSION['user_id'] ?? 0;
-    if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
+    if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
         $stmt = $conn->prepare("SELECT COUNT(*) as total FROM sessions s JOIN session_assignments sa ON s.session_id = sa.session_id WHERE s.status != 'Inactive' AND sa.user_id = ?");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
@@ -37,7 +37,7 @@ try {
     $response['active_sessions'] = $row['total'] ?? 0;
 
     // 2. Tasks/Deadlines Stats (Pending)
-    if ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0)) {
+    if ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0)) {
         // Admin sees all pending deadlines
         $sql = "SELECT COUNT(*) as total FROM deadlines WHERE status = 'Pending' OR status = 'In Progress'";
         $res = $conn->query($sql);
@@ -109,7 +109,7 @@ try {
     $response['recent_activities'] = $activities;
 
     // 5. Upcoming Sessions (For Sidebar)
-    if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
+    if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
         $sql = "SELECT s.*, u.user_name as creator_name FROM sessions s JOIN session_assignments sa ON s.session_id = sa.session_id LEFT JOIN users u ON s.created_by = u.user_id WHERE s.status = 'Scheduled' AND sa.user_id = ? ORDER BY s.session_date ASC LIMIT 3";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $userId);

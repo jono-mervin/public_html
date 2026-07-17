@@ -6,7 +6,7 @@ header('Content-Type: application/json');
 
 $isAuthenticated = (isset($_SESSION['is_logged_in']) && $_SESSION['is_logged_in']);
 $role = $_SESSION['user_role'] ?? 'User - Committee';
-$isAdmin = (strcasecmp($role, 'Super Admin') === 0 || strcasecmp($role, 'Admin') === 0);
+$isAdmin = (strcasecmp($role, 'Super Admin') === 0 || strcasecmp($role, 'Admin') === 0 || strcasecmp($role, 'Administrator') === 0);
 
 // Allow 'ping' action for any authenticated user to keep session alive
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'ping') {

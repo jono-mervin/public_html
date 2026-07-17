@@ -29,7 +29,7 @@ try {
             $userRole = $_SESSION['user_role'] ?? 'User - Committee';
             $userId = $currentUserId;
 
-            $isAdmin = ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0) || strcasecmp($userRole, 'Admin') === 0);
+            $isAdmin = (strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0);
             $isNotificationsView = (isset($_GET['view']) && $_GET['view'] === 'notifications');
 
             // Fetch persistable read status for system-generated items (IDs with prefixes)
@@ -277,7 +277,7 @@ try {
             }
 
             // Admins and Staff see these system-generated reminders
-            $isAdmin = ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0) || strcasecmp($userRole, 'Admin') === 0);
+            $isAdmin = (strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0);
             $isStaff = (strcasecmp($userRole, 'Staff') === 0);
 
             if ($isAdmin || $isStaff) {
@@ -497,7 +497,7 @@ try {
             if (isset($input['role_based']) && ($input['role_based'] === true || $input['role_based'] === 'true' || $input['role_based'] == 1)) {
                 // Only Administrator can send role-based reminders
                 $currentRole = $userRole;
-                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0) {
+                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0 && strcasecmp($currentRole, 'Administrator') !== 0) {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only Admins can send role-based reminders']);
                     exit;
@@ -818,7 +818,7 @@ try {
             } else if ($action === 'update_reminder') {
                 // Update reminder batch details
                 $currentRole = $_SESSION['user_role'] ?? 'User - Committee';
-                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0) {
+                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0 && strcasecmp($currentRole, 'Administrator') !== 0) {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only Admins can edit reminders']);
                     exit;
@@ -855,7 +855,7 @@ try {
             } else if ($action === 'add_recipients') {
                 // Add recipients to existing batch
                 $currentRole = $_SESSION['user_role'] ?? 'User - Committee';
-                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0) {
+                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0 && strcasecmp($currentRole, 'Administrator') !== 0) {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only Admins can add recipients']);
                     exit;
@@ -892,7 +892,7 @@ try {
                 // Manual re-send: Create a BRAND NEW batch so it always appears as a fresh notification,
                 // even if the original was already unread/pending.
                 $currentRole = $_SESSION['user_role'] ?? 'User - Committee';
-                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0) {
+                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0 && strcasecmp($currentRole, 'Administrator') !== 0) {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only Admins can trigger manual sends']);
                     exit;
@@ -1002,7 +1002,7 @@ try {
                 if ($reminder['creator_role'] !== 'Super Admin') {
                     throw new Exception("Staff can only delete notifications provided by the admin");
                 }
-            } else if ($userRole !== 'Super Admin' && $userRole !== 'Admin') {
+            } else if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator') {
                 // Regular users can only delete their own
                 if ($reminder['created_by'] != $currentUserId) {
                     throw new Exception("Unauthorized to delete this reminder");
@@ -1010,7 +1010,7 @@ try {
             }
             // Admin can delete anything
 
-            $isAdmin = ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0) || strcasecmp($userRole, 'Admin') === 0);
+            $isAdmin = (strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0);
             if ($isAdmin) {
                 // Admins only "hide" the reminder from their panel
                 // Updated: Hide ALL duplicates (same title/message/type/id) to avoid "whack-a-mole" deletion

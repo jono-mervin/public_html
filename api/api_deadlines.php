@@ -33,7 +33,7 @@ if ($method === 'GET') {
     $userRole = $_SESSION['user_role'] ?? 'User - Committee';
     $userId = $_SESSION['user_id'] ?? 0;
 
-    $isAdminOrStaff = ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0) || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Staff') === 0);
+    $isAdminOrStaff = (strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0 || strcasecmp($userRole, 'Staff') === 0);
 
     if ($isAdminOrStaff) {
         // Admin and Staff see EVERYTHING

@@ -405,7 +405,7 @@ try {
 
                 $currentUserId = $_SESSION['user_id'] ?? 0;
                 $userRole = $_SESSION['user_role'] ?? 'User - Committee';
-                $isAdminOrStaff = ($userRole === 'Super Admin' && $userRole !== 'Admin' || $userRole === 'Staff');
+                $isAdminOrStaff = ($userRole === 'Super Admin' || $userRole === 'Admin' || $userRole === 'Administrator' || $userRole === 'Staff');
 
                 // Get file path and uploader before deletion
                 $pathStmt = $conn->prepare("SELECT file_path, uploaded_by FROM agenda_item_documents WHERE document_id = ?");
@@ -496,7 +496,7 @@ try {
             }
             if ($action === 'delete_motion') {
                 $userRole = $_SESSION['user_role'] ?? 'User - Committee';
-                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Staff') {
+                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator' && $userRole !== 'Staff') {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
                     exit;
@@ -530,7 +530,7 @@ try {
                 $agendaTitle = isset($input['agenda_title']) ? trim($input['agenda_title']) : null;
                 $agendaDescription = isset($input['agenda_description']) ? trim($input['agenda_description']) : '';
 
-                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Staff') {
+                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator' && $userRole !== 'Staff') {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only administrators and staff can update agenda structure']);
                     exit;
@@ -587,7 +587,7 @@ try {
                 }
 
                 // Authorization Check: Admin, Staff, or Assigned User
-                $isAdminOrStaff = (strcasecmp($userRole, 'Super Admin' && $userRole !== 'Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Staff') === 0);
+                $isAdminOrStaff = (strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0 || strcasecmp($userRole, 'Staff') === 0);
                 $isAuthorized = $isAdminOrStaff;
                 if (!$isAuthorized) {
                     $checkStmt = $conn->prepare("SELECT assigned_to FROM agenda_items WHERE agenda_item_id = ?");
@@ -821,7 +821,7 @@ try {
                     exit;
                 }
 
-                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Staff') {
+                if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator' && $userRole !== 'Staff') {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Only administrators and staff can update item status']);
                     exit;
@@ -1148,7 +1148,7 @@ try {
 
             // If Staff, they can only update status
             // Administrator and Staff can update agendas
-            if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Staff') {
+            if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator' && $userRole !== 'Staff') {
                 http_response_code(403);
                 echo json_encode(['success' => false, 'message' => 'Unauthorized to update agendas']);
                 exit;
@@ -1234,7 +1234,7 @@ try {
 
             // Administrator and Staff can delete agendas
             $userRole = $_SESSION['user_role'] ?? 'User - Committee';
-            if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Staff') {
+            if ($userRole !== 'Super Admin' && $userRole !== 'Admin' && $userRole !== 'Administrator' && $userRole !== 'Staff') {
                 http_response_code(403);
                 echo json_encode(['success' => false, 'message' => 'Only administrators and staff can delete agendas']);
                 exit;

@@ -258,13 +258,13 @@ switch ($method) {
             $userRole = $_SESSION['user_role'] ?? 'User - Committee';
             $currentUserId = $_SESSION['user_id'] ?? 0;
 
-            if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
+            if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
                 $stmt = $conn->prepare("SELECT s.*, u.user_name as creator_name FROM sessions s JOIN session_assignments sa ON s.session_id = sa.session_id LEFT JOIN users u ON s.created_by = u.user_id WHERE s.session_id = ? AND sa.user_id = ?");
                 if (!$stmt) throw new Exception($conn->error);
                 $stmt->bind_param("ii", $sessionId, $currentUserId);
             } else {
                 $sql = "SELECT s.*, u.user_name as creator_name FROM sessions s LEFT JOIN users u ON s.created_by = u.user_id WHERE s.session_id = ?";
-                if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0)) {
+                if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0)) {
                     $sql .= " AND s.session_status = 'Active'";
                 }
                 $stmt = $conn->prepare($sql);
@@ -315,7 +315,6 @@ switch ($method) {
                     $row['status'] = ucfirst(strtolower($row['status']));
                     $attendanceList[] = $row;
                 }
-                $attendanceListStmt->close();
 
                 // Get meeting minutes
                 $minutesStmt = $conn->prepare("SELECT * FROM session_minutes WHERE session_id = ? ORDER BY created_at DESC LIMIT 1");
@@ -323,7 +322,6 @@ switch ($method) {
                 $minutesStmt->execute();
                 $minutesResult = $minutesStmt->get_result();
                 $minutes = $minutesResult->fetch_assoc(); // Can be null
-                $minutesStmt->close();
 
                 // Get session documents
                 $documentsStmt = $conn->prepare("
@@ -384,7 +382,6 @@ switch ($method) {
 
                     $documents[] = $row;
                 }
-                $documentsStmt->close();
 
                 // Get assigned staff
                 $staffStmt = $conn->prepare("
@@ -400,7 +397,6 @@ switch ($method) {
                 while ($staffRow = $staffResult->fetch_assoc()) {
                     $assignedStaff[] = $staffRow;
                 }
-                $staffStmt->close();
 
                 // Calculate Quorum
                 $tmRes = $conn->query("SELECT COUNT(*) as cnt FROM members");
@@ -448,7 +444,8 @@ switch ($method) {
             if (isset($attendanceStmt) && is_object($attendanceStmt)) $attendanceStmt->close();
             if (isset($agendaStmt) && is_object($agendaStmt)) $agendaStmt->close();
             if (isset($attendanceListStmt) && is_object($attendanceListStmt)) $attendanceListStmt->close();
-            if (isset($docStmt) && is_object($docStmt)) $docStmt->close();
+            if (isset($minutesStmt) && is_object($minutesStmt)) $minutesStmt->close();
+            if (isset($documentsStmt) && is_object($documentsStmt)) $documentsStmt->close();
             if (isset($staffStmt) && is_object($staffStmt)) $staffStmt->close();
             exit; // Stop execution after single session response
         }
@@ -461,7 +458,7 @@ switch ($method) {
                 FROM sessions s 
                 LEFT JOIN users u ON s.created_by = u.user_id
                 LEFT JOIN venues v ON s.venue_id = v.id";
-        if ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0)) {
+        if ((strcasecmp($userRole, 'Super Admin') === 0 || strcasecmp($userRole, 'Admin') === 0 || strcasecmp($userRole, 'Administrator') === 0)) {
             // See everything
         } else if (strcasecmp($userRole, 'Staff') === 0) {
             // Staff sees all sessions except soft-deleted ones
@@ -486,7 +483,7 @@ switch ($method) {
             throw new Exception("Failed to prepare statement: " . $conn->error);
         }
 
-        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
+        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
             $stmt->bind_param("i", $currentUserId);
         }
         $stmt->execute();
@@ -1001,7 +998,8 @@ switch ($method) {
                 exit;
             } elseif ($action === 'send_bulk_reminders') {
                 // Only Administrators can bulk send reminders
-                if (($_SESSION['user_role'] ?? 'User - Committee') !== 'Super Admin' && ($_SESSION['user_role'] ?? 'User - Committee') !== 'Admin') {
+                $currentRole = $_SESSION['user_role'] ?? 'User - Committee';
+                if (strcasecmp($currentRole, 'Super Admin') !== 0 && strcasecmp($currentRole, 'Admin') !== 0 && strcasecmp($currentRole, 'Administrator') !== 0) {
                     http_response_code(403);
                     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
                     exit;
@@ -1300,7 +1298,7 @@ switch ($method) {
 
         // Administrators and Staff can create sessions
         $userRole = $_SESSION['user_role'] ?? 'User - Committee';
-        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
+        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0) && strcasecmp($userRole, 'Staff') !== 0) {
             http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'Only administrators and staff can create sessions']);
             exit;
@@ -1602,7 +1600,7 @@ switch ($method) {
                 $sessionIdTemp = $sessionId;
                 $input = ['session_id' => $sessionIdTemp, 'status' => $status];
             }
-        } elseif ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0)) {
+        } elseif ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0)) {
             http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'Unauthorized to update sessions']);
             exit;
@@ -2011,7 +2009,7 @@ switch ($method) {
         $sessionId = intval($input['session_id']);
 
         // Check permissions: Administrator or Creator
-        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0)) {
+        if ((strcasecmp($userRole, 'Super Admin') !== 0 && strcasecmp($userRole, 'Admin') !== 0 && strcasecmp($userRole, 'Administrator') !== 0)) {
             $checkStmt = $conn->prepare("SELECT created_by FROM sessions WHERE session_id = ?");
             $checkStmt->bind_param("i", $sessionId);
             $checkStmt->execute();

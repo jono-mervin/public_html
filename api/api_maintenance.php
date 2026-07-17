@@ -14,7 +14,7 @@ if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
 }
 
 $role = $_SESSION['user_role'] ?? 'User - Committee';
-$isRealAdmin = (strcasecmp($role, 'Super Admin') === 0 || strcasecmp($role, 'Admin') === 0);
+$isRealAdmin = (strcasecmp($role, 'Super Admin') === 0 || strcasecmp($role, 'Admin') === 0 || strcasecmp($role, 'Administrator') === 0);
 
 if (!$isRealAdmin) {
     http_response_code(403);

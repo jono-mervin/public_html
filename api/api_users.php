@@ -176,7 +176,7 @@ switch ($method) {
             }
         } else {
             // Default Create User logic (Ideally Admin Only)
-            if ($_SESSION['user_role'] !== 'Super Admin' && $_SESSION['user_role'] !== 'Admin') {
+            if ($_SESSION['user_role'] !== 'Super Admin' && $_SESSION['user_role'] !== 'Admin' && $_SESSION['user_role'] !== 'Administrator') {
                 http_response_code(403);
                 echo json_encode(['success' => false, 'message' => 'Only Admins can create users']);
                 exit;

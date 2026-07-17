@@ -1479,8 +1479,8 @@ function simulateRealTimeUpdates() {
         if (window.activeSection === 'dashboard') {
             await loadAdminDashboardData();
         } else if (window.activeSection === 'analytics') {
-            if (typeof window.renderReportsAnalytics === 'function') {
-                await window.renderReportsAnalytics();
+            if (typeof window.loadReportsDataEnhanced === 'function') {
+                await window.loadReportsDataEnhanced();
             }
         } else if (window.activeSection === 'sessions') {
             const user = getCurrentUser();

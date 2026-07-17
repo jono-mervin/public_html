@@ -163,7 +163,7 @@ function integrationRequireSessionAdmin(): array
     }
 
     $role = $_SESSION['user_role'] ?? '';
-    if (strcasecmp($role, 'Super Admin') !== 0 && strcasecmp($role, 'Admin') !== 0) {
+    if (strcasecmp($role, 'Super Admin') !== 0 && strcasecmp($role, 'Admin') !== 0 && strcasecmp($role, 'Administrator') !== 0) {
         integrationJsonError(403, 'Only Admin or Super Admin can manage integration clients');
     }
 
